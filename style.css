@@ -166,6 +166,17 @@ body::before {
   color: white;
   box-shadow: 0 4px 20px rgba(192,57,43,0.4);
 }
+.btn-surrender {
+  background: transparent;
+  color: #a08060;
+  border: 1px solid rgba(160,128,96,0.35);
+  box-shadow: none;
+}
+.btn-surrender:hover {
+  background: rgba(160,128,96,0.1);
+  border-color: rgba(160,128,96,0.6);
+  color: #c9a87c;
+}
 .btn-sm {
   font-size: 0.75rem;
   padding: 8px 16px;

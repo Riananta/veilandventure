@@ -82,17 +82,24 @@ const Audio_ = (() => {
   function playSFX(name) {
     if (sfxMuted) return;
     const paths = {
-      dice:     'audio/dice_roll.mp3',
-      card:     'audio/card_flip.mp3',
-      walk:     'audio/footstep.mp3',
-      special:  'audio/special.mp3',
+      dice:    'audio/dice_roll.mp3',
+      card:    'audio/card_flip.mp3',
+      walk:    'audio/footstep.mp3',
+      special: 'audio/special.mp3',
+      modal:   'audio/modal_open.mp3',
+      btn:     'audio/btn_click.mp3',
+      finish:  'audio/finish.mp3',
+    };
+    const vols = {
+      dice:0.70, card:0.75, walk:0.55, special:0.80,
+      modal:0.45, btn:0.50, finish:0.90,
     };
     const src = paths[name];
     if (!src) return;
     try {
       // Clone agar bisa overlap
       const clone = _load(src).cloneNode();
-      clone.volume = 0.7;
+      clone.volume = vols[name] ?? 0.7;
       clone.play().catch(() => {});
     } catch(e) {}
   }
@@ -217,16 +224,20 @@ function buatDeck(difficulty) {
 let selectedDifficulty = 'easy';
 
 function tampilkanModalPermainanBaru() {
+  Audio_.playSFX('btn');
   document.getElementById('new-game-modal').classList.remove('hidden');
+  Audio_.playSFX('modal');
   perbaruiPengaturanPemain();
   Audio_.startBGM();
 }
 
 function tutupModal(id) {
+  Audio_.playSFX('btn');
   document.getElementById(id).classList.add('hidden');
 }
 
 function pilihKesulitan(diff) {
+  Audio_.playSFX('btn');
   selectedDifficulty = diff;
   document.querySelectorAll('.difficulty-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.diff === diff);
@@ -254,6 +265,7 @@ function perbaruiPengaturanPemain() {
 // MULAI PERMAINAN BARU
 // ────────────────────────────────────────────────────────────
 function mulaiPermainanBaru() {
+  Audio_.playSFX('btn');
   const count = parseInt(document.getElementById('player-count').value);
   const sessionName = document.getElementById('game-session-name').value.trim() || `Sesi ${new Date().toLocaleDateString('id-ID')}`;
   const players = [];
@@ -752,9 +764,11 @@ function tampilkanModalReroll(player, total) {
     <span style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;display:block;">Kupon akan habis terpakai.</span>`;
 
   overlay.classList.remove('hidden');
+  Audio_.playSFX('modal');
 }
 
 async function konfirmasiReroll(pakai) {
+  Audio_.playSFX('btn');
   const overlay = document.getElementById('reroll-confirm-modal');
   if (overlay) overlay.classList.add('hidden');
 
@@ -787,27 +801,25 @@ async function konfirmasiReroll(pakai) {
 // ────────────────────────────────────────────────────────────
 async function gerakkanPemain(player, steps) {
   const oldPos = player.position;
-  let newPos = Math.min(player.position + steps, CARD_TOTAL);
+  // Tidak di-clamp — biarkan melebihi CARD_TOTAL agar finish terdeteksi
+  const newPos = player.position + steps;
 
-  for (let p = oldPos + 1; p <= newPos; p++) {
+  // Gerak animasi hanya sampai CARD_TOTAL max
+  const moveUntil = Math.min(newPos, CARD_TOTAL);
+  for (let p = oldPos + 1; p <= moveUntil; p++) {
     player.position = p;
     Audio_.playSFX('walk');
     renderToken();
-    if (p <= CARD_TOTAL) {
-      const slotEl = document.getElementById(`slot-${p - 1}`);
-      if (slotEl) slotEl.classList.add('highlight');
-    }
+    const slotEl = document.getElementById(`slot-${p - 1}`);
+    if (slotEl) slotEl.classList.add('highlight');
     await tidur(400);
-    if (p <= CARD_TOTAL) {
-      const slotEl = document.getElementById(`slot-${p - 1}`);
-      if (slotEl) slotEl.classList.remove('highlight');
-    }
+    if (slotEl) slotEl.classList.remove('highlight');
     await tidur(80);
   }
 
-  // Periksa apakah sudah melewati garis finish
-  if (newPos >= CARD_TOTAL) {
-    player.position = CARD_TOTAL;
+  // FINISH: hanya jika langkah MELEWATI kartu terakhir (bukan berhenti di atasnya)
+  if (newPos > CARD_TOTAL) {
+    player.position = CARD_TOTAL + 1; // posisi "di luar papan"
     player.finished = true;
     const rank = G.finishedPlayers.length;
     G.finishedPlayers.push(player.id);
@@ -817,30 +829,23 @@ async function gerakkanPemain(player, steps) {
     G.totalScores[player.id] = (G.totalScores[player.id] || 0) + pts;
 
     notifikasi(`🏁 ${player.name} selesai! (+${pts} poin)`, 'success');
+    Audio_.playSFX('finish');
     renderSidebar();
     renderToken();
 
-    const allDone = G.players.every(p => p.finished);
-    if (allDone) {
-      await tidur(800);
-      tampilkanRekap();
-      return;
-    }
-    gilirBerikutnya();
+    await periksaSelesai();
     return;
   }
 
-  // Landing di kartu
+  // Berhenti tepat di kartu (termasuk kartu ke-40) — harus buka kartu
   const card = G.cards[newPos - 1];
   const slotIdx = newPos - 1;
 
   if (!card.revealed) {
-    // Kartu tertutup: tampilkan modal agar pemain membuka
     G.pendingCardAction = { player, card, slotIdx };
     G.phase = 'card-action';
     tampilkanAksiKartu(card, false);
   } else {
-    // Kartu sudah terbuka: langsung terapkan efek tanpa modal
     await terapkanEfekKartu(player, card, slotIdx);
   }
 }
@@ -999,9 +1004,11 @@ function tampilkanModalAntiRed(player, card, slotIdx, suit, val) {
     <span style="font-size:0.72rem;color:var(--text-dim);display:block;margin-top:8px;">Kupon akan habis terpakai.</span>`;
 
   overlay.classList.remove('hidden');
+  Audio_.playSFX('modal');
 }
 
 async function konfirmasiAntiRed(pakai) {
+  Audio_.playSFX('btn');
   const overlay = document.getElementById('antired-confirm-modal');
   if (overlay) overlay.classList.add('hidden');
 
@@ -1080,9 +1087,11 @@ function tampilkanModalKupon(player) {
   });
 
   document.getElementById('coupon-modal').classList.remove('hidden');
+  Audio_.playSFX('modal');
 }
 
 function buka_amplop(envEl, type) {
+  Audio_.playSFX('card');
   // Tampilkan isi amplop dulu
   envEl.classList.add('revealed');
   // Nonaktifkan semua amplop lain
@@ -1107,6 +1116,132 @@ function pilihanKupon(type) {
   G._pendingCouponPlayer = null;
   renderKuponSidebar();
   gilirBerikutnya();
+}
+
+// ────────────────────────────────────────────────────────────
+// CEK KONDISI AKHIR GAME
+// Dipanggil setelah setiap pemain finish.
+// - Jika semua selesai → tampilkan rekap
+// - Jika hanya 1 pemain tersisa (belum finish) → otomatis akhiri
+// ────────────────────────────────────────────────────────────
+async function periksaSelesai() {
+  await tidur(600);
+
+  const belumSelesai = G.players.filter(p => !p.finished);
+
+  // Semua selesai
+  if (belumSelesai.length === 0) {
+    tampilkanRekap();
+    return;
+  }
+
+  // Sisa 1 pemain — otomatis jadi terakhir, permainan berakhir
+  if (belumSelesai.length === 1) {
+    const sisa = belumSelesai[0];
+    const rank = G.finishedPlayers.length;
+    G.finishedPlayers.push(sisa.id);
+    sisa.finishRank = rank;
+    sisa.finished = true;
+    sisa.position = CARD_TOTAL + 1;
+
+    const pts = RANK_POINTS[Math.min(rank, RANK_POINTS.length - 1)];
+    G.totalScores[sisa.id] = (G.totalScores[sisa.id] || 0) + pts;
+
+    notifikasi(`🏁 ${sisa.name} otomatis selesai sebagai terakhir! (+${pts} poin)`, 'info');
+    renderSidebar();
+    renderToken();
+    await tidur(800);
+    tampilkanRekap();
+    return;
+  }
+
+  // Masih ada 2+ pemain — lanjut giliran
+  gilirBerikutnya();
+}
+
+// ────────────────────────────────────────────────────────────
+// MENYERAH — semua pemain dapat 1 poin, game berakhir
+// ────────────────────────────────────────────────────────────
+function konfirmasiMenyerah() {
+  Audio_.playSFX('btn');
+  if (!confirm('🏳 Menyerah?\n\nPermainan akan berakhir. Semua pemain mendapat 1 poin.')) return;
+  menyerah();
+}
+
+function menyerah() {
+  // Catat siapa yang belum selesai SEBELUM diubah
+  const belumSelesai = G.players.filter(p => !p.finished);
+  const sudahSelesai = G.players.filter(p => p.finished);
+
+  // Tandai pemain belum selesai sebagai finished (rank sama = terakhir bersama)
+  const rankMenyerah = G.finishedPlayers.length;
+  belumSelesai.forEach(p => {
+    p.finished = true;
+    p.finishRank = rankMenyerah;
+    G.finishedPlayers.push(p.id);
+    // Hanya pemain yang belum finish yang mendapat +1 poin
+    G.totalScores[p.id] = (G.totalScores[p.id] || 0) + 1;
+  });
+  // Pemain yang sudah finish TIDAK mendapat poin tambahan — poin mereka sudah dihitung saat finish
+
+  G.phase = 'done';
+
+  // Tutup semua modal aktif
+  ['card-action-modal','antired-confirm-modal','reroll-confirm-modal','coupon-modal'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.add('hidden');
+  });
+
+  const pesanSistem = belumSelesai.length > 0
+    ? `🏳 Permainan diakhiri — ${belumSelesai.map(p => p.name).join(', ')} mendapat +1 poin`
+    : '🏳 Permainan diakhiri';
+  notifikasi(pesanSistem, 'info');
+  renderSidebar();
+
+  setTimeout(() => tampilkanRekapMenyerah(sudahSelesai, belumSelesai), 800);
+}
+
+function tampilkanRekapMenyerah(sudahSelesai, belumSelesai) {
+  // Urutkan: pemain yang sudah finish dulu (berdasar finishRank), lalu yang belum (urutan asli)
+  const sorted = [
+    ...sudahSelesai.sort((a, b) => a.finishRank - b.finishRank),
+    ...belumSelesai,
+  ];
+
+  let html = `
+    <div style="text-align:center;margin-bottom:20px;">
+      <div style="font-size:2rem;margin-bottom:8px;">🏳</div>
+      <div style="font-family:var(--font-serif);font-size:0.9rem;color:var(--text-muted);font-style:italic;">
+        Permainan diakhiri lebih awal.<br>
+        Pemain yang belum finish mendapat <strong style="color:var(--gold)">+1 poin</strong>.
+      </div>
+    </div>
+    <div class="recap-list">
+  `;
+
+  sorted.forEach((p, i) => {
+    const totalPts = G.totalScores[p.id] || 0;
+    const sudahF = sudahSelesai.includes(p);
+    // Tampilkan poin yang didapat di ronde ini
+    const ptRonde = sudahF
+      ? RANK_POINTS[Math.min(p.finishRank, RANK_POINTS.length - 1)]
+      : 1;
+    const label = sudahF ? `+${ptRonde}pt` : `+1pt 🏳`;
+    html += `
+      <div class="recap-item">
+        <div class="recap-rank">${['①','②','③','④'][i] || `${i+1}`}</div>
+        <div class="recap-avatar" style="background:${p.color}">${p.initials}</div>
+        <div class="recap-name">${p.name}</div>
+        <div class="recap-points">${label} → Total: ${totalPts}pt</div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+
+  document.getElementById('recap-content').innerHTML = html;
+  Audio_.playSFX('modal');
+  document.getElementById('recap-modal').classList.remove('hidden');
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1177,10 +1312,12 @@ function tampilkanRekap() {
   listHTML += '</div>';
 
   document.getElementById('recap-content').innerHTML = podiumHTML + listHTML;
+  Audio_.playSFX('modal');
   document.getElementById('recap-modal').classList.remove('hidden');
 }
 
 function rondeBerikutnya() {
+  Audio_.playSFX('btn');
   G.gameCount++;
   document.getElementById('recap-modal').classList.add('hidden');
 
@@ -1221,6 +1358,7 @@ function perbaruiTombolMuat() {
 }
 
 function simpanPermainan() {
+  Audio_.playSFX('btn');
   // Gunakan saveId yang sudah ada untuk sesi ini (berdasarkan sessionName),
   // sehingga menyimpan ulang mengupdate slot yang sama, tidak menumpuk.
   const list = dapatkanDaftarSimpanan();
@@ -1266,10 +1404,12 @@ function tampilkanModalMuatPermainan() {
   }
 
   document.getElementById('load-game-modal').classList.remove('hidden');
+  Audio_.playSFX('modal');
   Audio_.startBGM();
 }
 
 function muatPermainan(saveId) {
+  Audio_.playSFX('btn');
   const raw = localStorage.getItem(SAVE_KEY_PREFIX + saveId);
   if (!raw) {
     notifikasi('Simpanan tidak ditemukan.', 'danger');
@@ -1299,6 +1439,7 @@ function muatPermainan(saveId) {
 }
 
 function hapusSimpanan(event, saveId) {
+  Audio_.playSFX('btn');
   event.stopPropagation();
   localStorage.removeItem(SAVE_KEY_PREFIX + saveId);
   const list = dapatkanDaftarSimpanan().filter(s => s.saveId !== saveId);
@@ -1312,14 +1453,17 @@ function toggleAudioBGM() {
   const muted = Audio_.toggleBGM();
   const btn = document.getElementById('bgm-toggle-btn');
   if (btn) btn.textContent = muted ? '🔇 BGM' : '🎵 BGM';
+  if (!Audio_.isSFXMuted()) Audio_.playSFX('btn');
 }
 function toggleAudioSFX() {
   const muted = Audio_.toggleSFX();
   const btn = document.getElementById('sfx-toggle-btn');
   if (btn) btn.textContent = muted ? '🔕 SFX' : '🔊 SFX';
+  if (!muted) Audio_.playSFX('btn'); // konfirmasi saat unmute
 }
 
 function konfirmasiKeluar() {
+  Audio_.playSFX('btn');
   if (confirm('Keluar ke menu utama? (Kemajuan yang belum disimpan akan hilang)')) {
     keMenu();
   }
