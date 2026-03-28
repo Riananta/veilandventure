@@ -538,7 +538,7 @@ async function lemparDadu() {
   }
 
   G.useDoubleDice = false;
-  await tidur(200);
+  await tidur(1000);
   await gerakkanPemain(cp, total);
 }
 
@@ -556,11 +556,12 @@ async function gerakkanPemain(player, steps) {
       const slotEl = document.getElementById(`slot-${p - 1}`);
       if (slotEl) slotEl.classList.add('highlight');
     }
-    await tidur(120);
+    await tidur(400);
     if (p <= CARD_TOTAL) {
       const slotEl = document.getElementById(`slot-${p - 1}`);
       if (slotEl) slotEl.classList.remove('highlight');
     }
+    await tidur(80);
   }
 
   // Periksa apakah sudah melewati garis finish
@@ -592,18 +593,14 @@ async function gerakkanPemain(player, steps) {
   const card = G.cards[newPos - 1];
   const slotIdx = newPos - 1;
 
-  // Pemain harus berinteraksi dengan kartu
-  // Jika kartu sudah terbuka: langsung terapkan efek (atau tampilkan info)
-  // Jika kartu belum terbuka: tampilkan modal aksi membuka kartu
-  G.pendingCardAction = { player, card, slotIdx };
-  G.phase = 'card-action';
-
   if (!card.revealed) {
-    // Kartu tertutup: minta pemain membuka
+    // Kartu tertutup: tampilkan modal agar pemain membuka
+    G.pendingCardAction = { player, card, slotIdx };
+    G.phase = 'card-action';
     tampilkanAksiKartu(card, false);
   } else {
-    // Kartu sudah terbuka: tampilkan info dan terapkan efek
-    tampilkanAksiKartu(card, true);
+    // Kartu sudah terbuka: langsung terapkan efek tanpa modal
+    await terapkanEfekKartu(player, card, slotIdx);
   }
 }
 
@@ -621,14 +618,15 @@ function tampilkanAksiKartu(card, sudahTerbuka) {
     title.textContent = '🂠 Kartu Ditemukan!';
     body.innerHTML = `Kamu berhenti di kartu ini. Klik tombol di bawah untuk membuka dan melihat isinya.`;
     btn.textContent = 'Buka Kartu';
-    modal.classList.remove('hidden');
+    // modal.classList.remove('hidden');
+    aksiKartu();
   } else {
     // Kartu sudah terbuka
-    // const desc = deskripsiKartu(card);
-    // title.textContent = '👁 Kartu Sudah Terbuka';
-    // body.innerHTML = `Kartu ini sudah pernah dibuka sebelumnya:<br><br><strong style="color:var(--gold)">${desc}</strong><br><br>Efek kartu akan diterapkan.`;
-    // btn.textContent = 'Terapkan Efek';
-    aksiKartu()
+    const desc = deskripsiKartu(card);
+    title.textContent = '👁 Kartu Sudah Terbuka';
+    body.innerHTML = `Kartu ini sudah pernah dibuka sebelumnya:<br><br><strong style="color:var(--gold)">${desc}</strong><br><br>Efek kartu akan diterapkan.`;
+    btn.textContent = 'Terapkan Efek';
+    aksiKartu();
   }
 
 }
@@ -697,7 +695,7 @@ async function terapkanEfekKartu(player, card, slotIdx) {
     for (let p = player.position - 1; p >= backPos; p--) {
       player.position = p;
       renderToken();
-      await tidur(100);
+      await tidur(700);
     }
 
     await tidur(400);
@@ -914,15 +912,23 @@ function perbaruiTombolMuat() {
 }
 
 function simpanPermainan() {
-  const saveId = 'save_' + Date.now();
-  const state = { ...G, savedAt: Date.now(), saveId };
+  // Gunakan saveId yang sudah ada untuk sesi ini (berdasarkan sessionName),
+  // sehingga menyimpan ulang mengupdate slot yang sama, tidak menumpuk.
+  const list = dapatkanDaftarSimpanan();
+  const existing = list.find(s => s.sessionName === G.sessionName);
+  const saveId = existing ? existing.saveId : 'save_' + G.sessionName.replace(/\s+/g, '_') + '_' + Date.now();
 
+  const state = { ...G, savedAt: Date.now(), saveId };
   localStorage.setItem(SAVE_KEY_PREFIX + saveId, JSON.stringify(state));
 
-  const list = dapatkanDaftarSimpanan();
-  list.push({ saveId, sessionName: G.sessionName, gameCount: G.gameCount, savedAt: state.savedAt });
-  // Batasi maksimal 5 simpanan
-  if (list.length > 5) list.shift();
+  if (existing) {
+    // Update entri yang sudah ada
+    existing.gameCount = G.gameCount;
+    existing.savedAt   = state.savedAt;
+  } else {
+    // Tambahkan entri baru
+    list.push({ saveId, sessionName: G.sessionName, gameCount: G.gameCount, savedAt: state.savedAt });
+  }
   localStorage.setItem(SAVE_LIST_KEY, JSON.stringify(list));
 
   perbaruiTombolMuat();
