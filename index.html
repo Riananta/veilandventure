@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VEIL & VENTURE — Card Trail Game</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ============================================================
+     LAYAR MENU
+     ============================================================ -->
+<div id="menu-screen" class="screen">
+  <div class="menu-logo">
+    <div class="menu-logo-title">VEIL &amp; VENTURE</div>
+    <div class="menu-logo-sub">Jalur Kartu · Strategi · Nasib</div>
+    <div class="menu-ornament">
+      <div class="menu-ornament-line"></div>
+      <div class="menu-ornament-diamond"></div>
+      <div class="menu-ornament-line"></div>
+    </div>
+  </div>
+  <div class="menu-buttons">
+    <button class="btn btn-primary" onclick="tampilkanModalPermainanBaru()">✦ Permainan Baru</button>
+    <button class="btn btn-secondary" id="load-game-btn" onclick="tampilkanModalMuatPermainan()">◈ Muat Permainan</button>
+  </div>
+  <div style="margin-top:24px; font-family:var(--font-body); font-size:0.78rem; color:var(--text-dim); text-align:center; font-style:italic;">
+    Telusuri jalur tersembunyi. Tantang kartu.<br>Keberuntungan berpihak pada yang berani.
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL PERMAINAN BARU
+     ============================================================ -->
+<div id="new-game-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-title">✦ Petualangan Baru ✦</div>
+
+    <div class="form-group">
+      <label class="form-label">Nama Sesi</label>
+      <input class="form-input" type="text" id="game-session-name" placeholder="cth: Sesi Keluarga Malam Ini" maxlength="32">
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Jumlah Pemain</label>
+      <select class="form-select" id="player-count" onchange="perbaruiPengaturanPemain()">
+        <option value="2">2 Pemain</option>
+        <option value="3">3 Pemain</option>
+        <option value="4" selected>4 Pemain</option>
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Pemain</label>
+      <div id="player-setup-list"></div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Kesulitan</label>
+      <div class="difficulty-options">
+        <div class="difficulty-btn active" data-diff="easy" onclick="pilihKesulitan('easy')">☘ Mudah</div>
+        <div class="difficulty-btn" data-diff="medium" onclick="pilihKesulitan('medium')">⚖ Sedang</div>
+        <div class="difficulty-btn" data-diff="hard" onclick="pilihKesulitan('hard')">☠ Sulit</div>
+      </div>
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:8px;">
+      <button class="btn btn-primary" style="flex:1" onclick="mulaiPermainanBaru()">Mulai Petualangan</button>
+      <button class="btn btn-secondary btn-sm" onclick="tutupModal('new-game-modal')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL MUAT PERMAINAN
+     ============================================================ -->
+<div id="load-game-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-title">◈ Muat Permainan ◈</div>
+    <div id="save-slots-list">
+      <p style="text-align:center; color:var(--text-muted); font-style:italic;">Tidak ada simpanan ditemukan.</p>
+    </div>
+    <div style="margin-top:16px;">
+      <button class="btn btn-secondary btn-sm" style="width:100%" onclick="tutupModal('load-game-modal')">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL PILIH KUPON (amplop tertutup)
+     ============================================================ -->
+<div id="coupon-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-title">🃏 Berkah Ace of Spades</div>
+    <p style="text-align:center; font-size:0.85rem; color:var(--text-muted); margin-bottom:20px; font-style:italic;">
+      Kamu mendarat di <strong style="color:var(--gold)">Ace of Spades</strong> — pilih satu amplop kuponmu!
+    </p>
+    <p style="text-align:center; font-size:0.8rem; color:var(--text-dim); margin-bottom:16px;">Klik amplop untuk membukanya</p>
+    <div class="coupon-envelope-grid" id="coupon-envelopes">
+      <!-- Diisi oleh JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL REKAP
+     ============================================================ -->
+<div id="recap-modal" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-title">⚜ Ronde Selesai ⚜</div>
+    <div id="recap-content"></div>
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button class="btn btn-primary" style="flex:1" onclick="rondeBerikutnya()">Ronde Berikutnya →</button>
+      <button class="btn btn-danger btn-sm" onclick="keMenu()">Menu Utama</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     MODAL AKSI KARTU (saat pemain landing di kartu)
+     ============================================================ -->
+<div id="card-action-modal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:380px; text-align:center;">
+    <div class="modal-title" id="card-action-title">Kartu Ditemukan</div>
+    <div id="card-action-body" style="margin-bottom:20px; font-size:0.9rem; color:var(--text-muted); line-height:1.5;"></div>
+    <button class="btn btn-primary" style="width:100%" id="card-action-btn" onclick="aksiKartu()">Buka Kartu</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     LAYAR PERMAINAN
+     ============================================================ -->
+<div id="game-screen" class="hidden">
+  <!-- Header -->
+  <header id="game-header">
+    <div class="header-logo">VEIL &amp; VENTURE</div>
+    <div class="header-game-num" id="header-game-num">Game #1</div>
+    <div class="header-actions">
+      <button class="btn btn-secondary btn-xs" onclick="simpanPermainan()">💾 Simpan</button>
+      <button class="btn btn-danger btn-xs" onclick="konfirmasiKeluar()">✕ Keluar</button>
+    </div>
+  </header>
+
+  <!-- Sidebar -->
+  <aside id="game-sidebar">
+
+    <!-- Giliran & Dadu — paling atas -->
+    <div id="sidebar-current-turn">
+      <div class="sidebar-section-title">Giliran Sekarang</div>
+      <div class="sidebar-turn-player">
+        <div class="sidebar-turn-avatar" id="sb-cp-avatar"></div>
+        <div>
+          <div class="sidebar-turn-name" id="sb-cp-name">—</div>
+          <div class="sidebar-turn-label">Sedang bermain</div>
+        </div>
+      </div>
+      <div class="sidebar-dice-row">
+        <div class="sidebar-dice" id="dice-1">🎲</div>
+        <div class="sidebar-dice inactive" id="dice-2">🎲</div>
+        <div class="sidebar-dice-total" id="dice-total">—</div>
+      </div>
+      <div class="sidebar-roll-btn-wrap">
+        <button class="btn btn-primary btn-sm" id="roll-btn" onclick="lemparDadu()">🎲 Lempar Dadu</button>
+        <div class="coupon-use-area" id="coupon-use-area"></div>
+      </div>
+    </div>
+
+    <!-- Klasemen -->
+    <div>
+      <div class="sidebar-section-title">Klasemen</div>
+      <div id="scoreboard"></div>
+    </div>
+
+    <!-- Urutan Giliran -->
+    <div>
+      <div class="sidebar-section-title">Urutan Giliran</div>
+      <div id="turn-order"></div>
+    </div>
+
+    <!-- Kupon -->
+    <div>
+      <div class="sidebar-section-title">Kupon Dipegang</div>
+      <div id="sidebar-coupons" style="font-size:0.75rem; color:var(--text-dim); font-style:italic;">Tidak ada</div>
+    </div>
+
+  </aside>
+
+  <!-- Area Papan -->
+  <main id="board-area">
+    <!-- Zona Start -->
+    <div id="start-zone">
+      <div class="start-zone-label">⚑ Start</div>
+      <div class="position-zero-tokens" id="start-tokens"></div>
+    </div>
+
+    <!-- Papan Kartu dengan overlay token -->
+    <div style="position:relative;">
+      <div id="card-board"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Area Notifikasi -->
+<div id="notification-area"></div>
+
+<script src="game.js"></script>
+</body>
+</html>
