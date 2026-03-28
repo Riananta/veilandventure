@@ -92,7 +92,7 @@
      ============================================================ -->
 <div id="coupon-modal" class="modal-overlay hidden">
   <div class="modal">
-    <div class="modal-title">🃏 Berkah Ace of Spades</div>
+    <div class="modal-title">🃏 Ace of Spades</div>
     <p style="text-align:center; font-size:0.85rem; color:var(--text-muted); margin-bottom:20px; font-style:italic;">
       Kamu mendarat di <strong style="color:var(--gold)">Ace of Spades</strong> — pilih satu amplop kuponmu!
     </p>
@@ -137,6 +137,8 @@
     <div class="header-logo">VEIL &amp; VENTURE</div>
     <div class="header-game-num" id="header-game-num">Game #1</div>
     <div class="header-actions">
+      <button class="btn btn-secondary btn-xs audio-toggle-btn" id="bgm-toggle-btn" onclick="toggleAudioBGM()" title="Toggle Musik">🎵 BGM</button>
+      <button class="btn btn-secondary btn-xs audio-toggle-btn" id="sfx-toggle-btn" onclick="toggleAudioSFX()" title="Toggle Efek Suara">🔊 SFX</button>
       <button class="btn btn-secondary btn-xs" onclick="simpanPermainan()">💾 Simpan</button>
       <button class="btn btn-danger btn-xs" onclick="konfirmasiKeluar()">✕ Keluar</button>
     </div>

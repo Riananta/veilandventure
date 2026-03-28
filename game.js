@@ -58,6 +58,78 @@ const DEFAULT_COLORS = ['#c0392b','#2980b9','#27ae60','#e67e22'];
 const DEFAULT_NAMES  = ['Merah','Biru','Hijau','Oranye'];
 
 // ────────────────────────────────────────────────────────────
+// SISTEM AUDIO
+// Ambil file dari folder ./audio/
+// Backsound: audio/backsound.mp3 (loop)
+// SFX      : audio/dice_roll.mp3, audio/card_flip.mp3,
+//            audio/footstep.mp3, audio/special.mp3
+// ────────────────────────────────────────────────────────────
+const Audio_ = (() => {
+  let bgm = null;
+  let bgmMuted = false;
+  let sfxMuted = false;
+  const cache = {};
+
+  function _load(src) {
+    if (!cache[src]) {
+      const a = new window.Audio(src);
+      a.preload = 'auto';
+      cache[src] = a;
+    }
+    return cache[src];
+  }
+
+  function playSFX(name) {
+    if (sfxMuted) return;
+    const paths = {
+      dice:     'audio/dice_roll.mp3',
+      card:     'audio/card_flip.mp3',
+      walk:     'audio/footstep.mp3',
+      special:  'audio/special.mp3',
+    };
+    const src = paths[name];
+    if (!src) return;
+    try {
+      // Clone agar bisa overlap
+      const clone = _load(src).cloneNode();
+      clone.volume = 0.7;
+      clone.play().catch(() => {});
+    } catch(e) {}
+  }
+
+  function startBGM() {
+    if (bgm) return;
+    bgm = new window.Audio('audio/backsound.mp3');
+    bgm.loop = true;
+    bgm.volume = bgmMuted ? 0 : 0.35;
+    bgm.play().catch(() => {
+      // Autoplay blocked — try on first user interaction
+      document.addEventListener('pointerdown', () => bgm.play().catch(()=>{}), { once: true });
+    });
+  }
+
+  function stopBGM() {
+    if (bgm) { bgm.pause(); bgm.currentTime = 0; bgm = null; }
+  }
+
+  function toggleBGM() {
+    bgmMuted = !bgmMuted;
+    if (bgm) bgm.volume = bgmMuted ? 0 : 0.35;
+    return bgmMuted;
+  }
+
+  function toggleSFX() {
+    sfxMuted = !sfxMuted;
+    return sfxMuted;
+  }
+
+  function isBGMMuted() { return bgmMuted; }
+  function isSFXMuted() { return sfxMuted; }
+
+  return { playSFX, startBGM, stopBGM, toggleBGM, toggleSFX, isBGMMuted, isSFXMuted };
+})();
+
+// ────────────────────────────────────────────────────────────
 // UTILITAS
 // ────────────────────────────────────────────────────────────
 function randInt(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
@@ -147,6 +219,7 @@ let selectedDifficulty = 'easy';
 function tampilkanModalPermainanBaru() {
   document.getElementById('new-game-modal').classList.remove('hidden');
   perbaruiPengaturanPemain();
+  Audio_.startBGM();
 }
 
 function tutupModal(id) {
@@ -430,23 +503,26 @@ function renderKontrolDadu() {
   const rollBtn = document.getElementById('roll-btn');
   rollBtn.disabled = G.phase !== 'roll' || cp.finished;
 
-  // Tombol pakai kupon (hanya anti-red dan double-dice yang bisa diaktifkan sebelum roll)
+  // Tombol pakai kupon sebelum roll: hanya double-dice
+  // (anti-red → otomatis ditawarkan saat mendarat merah; reroll → ditawarkan setelah roll)
   const area = document.getElementById('coupon-use-area');
   area.innerHTML = '';
-  if (cp.coupon && G.phase === 'roll' && cp.coupon !== 'reroll') {
-    const icons = { 'anti-red': '🛡️', 'double-dice': '🎲' };
-    const labels = { 'anti-red': 'Anti Merah', 'double-dice': 'x2 Dadu' };
+  if (cp.coupon === 'double-dice' && G.phase === 'roll') {
     const btn = document.createElement('button');
-    btn.className = `btn btn-secondary btn-xs coupon-badge ${cp.coupon}`;
+    btn.className = 'btn btn-secondary btn-xs coupon-badge double-dice';
     btn.style.margin = '0';
-    btn.textContent = `${icons[cp.coupon]} Pakai ${labels[cp.coupon]}`;
-    btn.onclick = () => aktivasiKupon(cp.coupon);
+    btn.textContent = '🎲 Pakai x2 Dadu';
+    btn.onclick = () => aktivasiKupon('double-dice');
     area.appendChild(btn);
   } else if (cp.coupon === 'reroll' && G.phase === 'roll') {
-    // Tampilkan info bahwa reroll akan ditawarkan setelah roll
     const info = document.createElement('div');
     info.style.cssText = 'font-size:0.65rem;color:var(--text-dim);font-style:italic;text-align:center;padding:4px 0;';
-    info.textContent = '🔁 Kupon reroll aktif — akan ditawarkan setelah roll';
+    info.textContent = '🔁 Akan ditawarkan setelah roll';
+    area.appendChild(info);
+  } else if (cp.coupon === 'anti-red' && G.phase === 'roll') {
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:0.65rem;color:var(--text-dim);font-style:italic;text-align:center;padding:4px 0;';
+    info.textContent = '🛡️ Ditawarkan saat kena kartu merah';
     area.appendChild(info);
   }
 }
@@ -545,6 +621,46 @@ function aktivasiKupon(type) {
 }
 
 // ────────────────────────────────────────────────────────────
+// ANIMASI DADU 3D DILEMPAR
+// ────────────────────────────────────────────────────────────
+function animasiLemparDadu(doubleDice) {
+  return new Promise(resolve => {
+    let overlay = document.getElementById('dice-throw-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'dice-throw-overlay';
+
+    const d1 = `
+      <div class="dice-3d dice-fly-1">
+        <div class="dface df-front"></div>
+        <div class="dface df-back"></div>
+        <div class="dface df-right"></div>
+        <div class="dface df-left"></div>
+        <div class="dface df-top"></div>
+        <div class="dface df-bottom"></div>
+      </div>`;
+    const d2 = doubleDice ? `
+      <div class="dice-3d dice-fly-2">
+        <div class="dface df-front"></div>
+        <div class="dface df-back"></div>
+        <div class="dface df-right"></div>
+        <div class="dface df-left"></div>
+        <div class="dface df-top"></div>
+        <div class="dface df-bottom"></div>
+      </div>` : '';
+
+    overlay.innerHTML = `<div class="dice-throw-stage">${d1}${d2}</div>`;
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+      overlay.classList.add('dice-throw-fade');
+      setTimeout(() => { overlay.remove(); resolve(); }, 350);
+    }, 950);
+  });
+}
+
+// ────────────────────────────────────────────────────────────
 // LEMPAR DADU
 // ────────────────────────────────────────────────────────────
 async function lemparDadu() {
@@ -556,12 +672,16 @@ async function lemparDadu() {
   G.phase = 'move';
   document.getElementById('roll-btn').disabled = true;
 
+  // SFX dadu & animasi 3D
+  Audio_.playSFX('dice');
+  // await animasiLemparDadu(G.useDoubleDice);
+
   const d1 = document.getElementById('dice-1');
   const d2 = document.getElementById('dice-2');
   d1.classList.add('rolling');
   if (G.useDoubleDice) d2.classList.add('rolling');
 
-  await tidur(400);
+  await tidur(300);
 
   const r1 = lemparSatuDadu();
   const r2 = G.useDoubleDice ? lemparSatuDadu() : 0;
@@ -579,11 +699,11 @@ async function lemparDadu() {
 
   notifikasi(`🎲 ${cp.name} melempar ${G.useDoubleDice ? `${r1}+${r2}=` : ''}${total}`, 'info');
 
-  // Jika sedang dalam mode reroll (kupon sudah diaktifkan sebelumnya): langsung gerak
+  // Jika sedang dalam mode reroll: langsung gerak
   if (G.pendingReroll) {
     G.pendingReroll = false;
     G.useDoubleDice = false;
-    await tidur(800);
+    await tidur(600);
     await gerakkanPemain(cp, total);
     return;
   }
@@ -597,7 +717,7 @@ async function lemparDadu() {
     return;
   }
 
-  await tidur(1000);
+  await tidur(800);
   await gerakkanPemain(cp, total);
 }
 
@@ -671,6 +791,7 @@ async function gerakkanPemain(player, steps) {
 
   for (let p = oldPos + 1; p <= newPos; p++) {
     player.position = p;
+    Audio_.playSFX('walk');
     renderToken();
     if (p <= CARD_TOTAL) {
       const slotEl = document.getElementById(`slot-${p - 1}`);
@@ -779,6 +900,7 @@ async function aksiKartu() {
     card.revealed = true;
     const gameCard = document.querySelector(`#slot-${slotIdx} .game-card`);
     if (gameCard) gameCard.classList.add('flipped');
+    Audio_.playSFX('card');
     await tidur(700);
   }
 
@@ -800,6 +922,14 @@ async function terapkanEfekKartu(player, card, slotIdx) {
     const suit = SUITS[card.suit];
     const val = RANK_VALUES[card.rank];
 
+    // Jika pemain punya kupon anti-red, tawarkan dulu
+    if (player.coupon === 'anti-red') {
+      await tidur(300);
+      tampilkanModalAntiRed(player, card, slotIdx, suit, val);
+      return;
+    }
+
+    // Jika kupon sudah diaktifkan (pendingAntiRed dari alur lama — fallback)
     if (G.pendingAntiRed) {
       G.pendingAntiRed = false;
       notifikasi(`🛡️ Anti Merah memblokir ${suit.symbol} ${card.rank}! Selamat!`, 'success');
@@ -810,30 +940,10 @@ async function terapkanEfekKartu(player, card, slotIdx) {
 
     notifikasi(`${suit.symbol} ${player.name} kena Merah ${card.rank}! Mundur ${val} langkah!`, 'danger');
     await tidur(500);
-
-    const backPos = Math.max(0, player.position - val);
-    for (let p = player.position - 1; p >= backPos; p--) {
-      player.position = p;
-      renderToken();
-      await tidur(700);
-    }
-
-    await tidur(400);
-
-    // Setelah mundur, periksa apakah landing di kartu lagi
-    if (player.position > 0) {
-      const landedCard = G.cards[player.position - 1];
-      const landedSlotIdx = player.position - 1;
-
-      // Pemain harus berhenti di kartu hitam; jika merah lagi, proses lagi
-      G.pendingCardAction = { player, card: landedCard, slotIdx: landedSlotIdx };
-      G.phase = 'card-action';
-      tampilkanAksiKartu(landedCard, landedCard.revealed);
-    } else {
-      gilirBerikutnya();
-    }
+    await prosesUndurMerah(player, val);
 
   } else if (card.type === 'joker') {
+    Audio_.playSFX('special');
     notifikasi(`🃏 ${player.name} dapat JOKER — lempar bonus!`, 'special');
     await tidur(700);
     G.pendingExtraRoll = true;
@@ -849,10 +959,89 @@ async function terapkanEfekKartu(player, card, slotIdx) {
       await tidur(700);
       gilirBerikutnya();
     } else {
+      Audio_.playSFX('special');
       notifikasi(`♠ ${player.name} menemukan Ace of Spades! Pilih berkah!`, 'special');
       await tidur(400);
       tampilkanModalKupon(player);
     }
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// MODAL ANTI-RED (ditawarkan saat mendarat di kartu merah)
+// ────────────────────────────────────────────────────────────
+function tampilkanModalAntiRed(player, card, slotIdx, suit, val) {
+  G.phase = 'anti-red-confirm';
+  G._pendingAntiRedCtx = { player, card, slotIdx, suit, val };
+
+  let overlay = document.getElementById('antired-confirm-modal');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'antired-confirm-modal';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:380px;text-align:center;">
+        <div class="modal-title" style="color:#ff6b5b;">🛡️ Kupon Anti Merah!</div>
+        <div id="antired-confirm-desc" style="font-size:0.88rem;color:var(--text-muted);margin-bottom:24px;line-height:1.7;"></div>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary" style="flex:1;background:linear-gradient(135deg,#1a5c36,#27ae60);" onclick="konfirmasiAntiRed(true)">🛡️ Ya, Gunakan!</button>
+          <button class="btn btn-secondary" style="flex:1;" onclick="konfirmasiAntiRed(false)">✗ Tidak, Terima Hukuman</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const desc = document.getElementById('antired-confirm-desc');
+  desc.innerHTML = `Kamu mendarat di <strong style="color:#ff6b5b;">${suit.symbol} ${card.rank} ${suit.name}</strong> — harus mundur <strong style="color:#ff6b5b;">${val} langkah!</strong><br><br>
+    Kamu punya <strong style="color:#52d98a;">Kupon Anti Merah 🛡️</strong>.<br>
+    Gunakan untuk membatalkan hukuman ini?<br>
+    <span style="font-size:0.72rem;color:var(--text-dim);display:block;margin-top:8px;">Kupon akan habis terpakai.</span>`;
+
+  overlay.classList.remove('hidden');
+}
+
+async function konfirmasiAntiRed(pakai) {
+  const overlay = document.getElementById('antired-confirm-modal');
+  if (overlay) overlay.classList.add('hidden');
+
+  const ctx = G._pendingAntiRedCtx;
+  G._pendingAntiRedCtx = null;
+  if (!ctx) return;
+
+  const { player, card, slotIdx, suit, val } = ctx;
+
+  if (pakai) {
+    player.coupon = null;
+    renderKuponSidebar();
+    notifikasi(`🛡️ Anti Merah memblokir ${suit.symbol} ${card.rank}! Selamat!`, 'success');
+    await tidur(700);
+    gilirBerikutnya();
+  } else {
+    notifikasi(`${suit.symbol} ${player.name} kena Merah ${card.rank}! Mundur ${val} langkah!`, 'danger');
+    await tidur(500);
+    await prosesUndurMerah(player, val);
+  }
+}
+
+async function prosesUndurMerah(player, val) {
+  const backPos = Math.max(0, player.position - val);
+  for (let p = player.position - 1; p >= backPos; p--) {
+    player.position = p;
+    Audio_.playSFX('walk');
+    renderToken();
+    await tidur(400);
+  }
+  await tidur(400);
+
+  if (player.position > 0) {
+    const landedCard = G.cards[player.position - 1];
+    const landedSlotIdx = player.position - 1;
+    G.pendingCardAction = { player, card: landedCard, slotIdx: landedSlotIdx };
+    G.phase = 'card-action';
+    tampilkanAksiKartu(landedCard, landedCard.revealed);
+  } else {
+    gilirBerikutnya();
   }
 }
 
@@ -1077,6 +1266,7 @@ function tampilkanModalMuatPermainan() {
   }
 
   document.getElementById('load-game-modal').classList.remove('hidden');
+  Audio_.startBGM();
 }
 
 function muatPermainan(saveId) {
@@ -1118,6 +1308,17 @@ function hapusSimpanan(event, saveId) {
   notifikasi('Simpanan dihapus.', 'info');
 }
 
+function toggleAudioBGM() {
+  const muted = Audio_.toggleBGM();
+  const btn = document.getElementById('bgm-toggle-btn');
+  if (btn) btn.textContent = muted ? '🔇 BGM' : '🎵 BGM';
+}
+function toggleAudioSFX() {
+  const muted = Audio_.toggleSFX();
+  const btn = document.getElementById('sfx-toggle-btn');
+  if (btn) btn.textContent = muted ? '🔕 SFX' : '🔊 SFX';
+}
+
 function konfirmasiKeluar() {
   if (confirm('Keluar ke menu utama? (Kemajuan yang belum disimpan akan hilang)')) {
     keMenu();
@@ -1129,6 +1330,7 @@ function keMenu() {
   document.getElementById('card-action-modal').classList.add('hidden');
   document.getElementById('game-screen').classList.add('hidden');
   document.getElementById('menu-screen').classList.remove('hidden');
+  Audio_.stopBGM();
 }
 
 // ────────────────────────────────────────────────────────────

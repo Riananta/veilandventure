@@ -1178,8 +1178,221 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
   }
 }
 
-/* Very small landscape phones */
-@media (max-width: 767px) and (orientation: landscape) {
+
+/* ============================================================
+   AUDIO TOGGLE BUTTONS
+   ============================================================ */
+.audio-toggle-btn {
+  opacity: 0.75;
+  transition: opacity 0.2s, background 0.2s;
+  min-width: 52px;
+}
+.audio-toggle-btn:hover { opacity: 1; }
+.audio-toggle-btn.muted {
+  opacity: 0.4;
+  text-decoration: line-through;
+}
+
+/* ============================================================
+   3D DICE THROW OVERLAY
+   ============================================================ */
+#dice-throw-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+}
+
+#dice-throw-overlay.dice-throw-fade {
+  animation: dtFadeOut 0.35s ease forwards;
+}
+@keyframes dtFadeOut {
+  to { opacity: 0; }
+}
+
+.dice-throw-stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  pointer-events: none;
+}
+
+/* Each real-CSS 3D cube */
+.dice-3d {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  transform-style: preserve-3d;
+  /* faces use background so we render pips via CSS */
+}
+
+/* Pip dot pattern per face using box-shadow */
+.dface {
+  position: absolute;
+  width: 72px;
+  height: 72px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #f5f0e8 0%, #e8dfc8 100%);
+  border: 2px solid rgba(0,0,0,0.12);
+  box-shadow: inset 0 2px 6px rgba(255,255,255,0.8), inset 0 -2px 4px rgba(0,0,0,0.15);
+  backface-visibility: hidden;
+}
+
+/* Cube face transforms */
+.df-front  { transform: rotateY(  0deg) translateZ(36px); }
+.df-back   { transform: rotateY(180deg) translateZ(36px); }
+.df-right  { transform: rotateY( 90deg) translateZ(36px); }
+.df-left   { transform: rotateY(-90deg) translateZ(36px); }
+.df-top    { transform: rotateX( 90deg) translateZ(36px); }
+.df-bottom { transform: rotateX(-90deg) translateZ(36px); }
+
+/* Pip dots via pseudo-elements on each face */
+.dface::before, .dface::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+  background: #1a1010;
+}
+/* Face 1 – center dot */
+.df-front::before {
+  width: 14px; height: 14px;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+}
+/* Face 2 – two dots diagonal */
+.df-back::before {
+  width: 11px; height: 11px;
+  top: 16px; left: 16px;
+}
+.df-back::after {
+  width: 11px; height: 11px;
+  bottom: 16px; right: 16px;
+}
+/* Face 3 – diagonal three */
+.df-right::before {
+  width: 11px; height: 11px;
+  top: 14px; left: 14px;
+  box-shadow: 15px 15px 0 #1a1010, 30px 30px 0 #1a1010;
+}
+/* Face 4 – four corners */
+.df-left::before {
+  width: 10px; height: 10px;
+  top: 14px; left: 14px;
+  box-shadow: 30px 0 0 #1a1010;
+}
+.df-left::after {
+  width: 10px; height: 10px;
+  bottom: 14px; left: 14px;
+  box-shadow: 30px 0 0 #1a1010;
+}
+/* Face 5 – four corners + center */
+.df-top::before {
+  width: 10px; height: 10px;
+  top: 14px; left: 14px;
+  box-shadow: 30px 0 0 #1a1010, 15px 15px 0 #1a1010;
+}
+.df-top::after {
+  width: 10px; height: 10px;
+  bottom: 14px; left: 14px;
+  box-shadow: 30px 0 0 #1a1010;
+}
+/* Face 6 – two columns of 3 */
+.df-bottom::before {
+  width: 10px; height: 10px;
+  top: 12px; left: 16px;
+  box-shadow: 0 18px 0 #1a1010, 0 36px 0 #1a1010;
+}
+.df-bottom::after {
+  width: 10px; height: 10px;
+  top: 12px; right: 16px;
+  box-shadow: 0 18px 0 #1a1010, 0 36px 0 #1a1010;
+}
+
+/* ── Dice 1: thrown from top-left corner toward center ── */
+.dice-fly-1 {
+  top: -90px;
+  left: -90px;
+  animation: diceFly1 0.95s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+@keyframes diceFly1 {
+  0% {
+    top: -90px; left: -90px;
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(0.5);
+    opacity: 0;
+    filter: blur(4px);
+  }
+  15% { opacity: 1; filter: blur(0); }
+  70% {
+    top: calc(50vh - 36px); left: calc(50vw - 80px);
+    transform: rotateX(540deg) rotateY(360deg) rotateZ(180deg) scale(1.1);
+    opacity: 1;
+  }
+  85% {
+    top: calc(50vh - 20px); left: calc(50vw - 80px);
+    transform: rotateX(560deg) rotateY(380deg) rotateZ(190deg) scale(0.95);
+  }
+  100% {
+    top: calc(50vh - 30px); left: calc(50vw - 80px);
+    transform: rotateX(560deg) rotateY(390deg) rotateZ(195deg) scale(1);
+    opacity: 0.9;
+  }
+}
+
+/* ── Dice 2: thrown from top-right corner toward center ── */
+.dice-fly-2 {
+  top: -90px;
+  right: -90px;
+  left: auto;
+  animation: diceFly2 0.95s cubic-bezier(0.22, 0.61, 0.36, 1) forwards;
+}
+@keyframes diceFly2 {
+  0% {
+    top: -90px; right: -90px;
+    transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(0.5);
+    opacity: 0;
+    filter: blur(4px);
+  }
+  15% { opacity: 1; filter: blur(0); }
+  70% {
+    top: calc(50vh - 36px);
+    transform: translateX(calc(50vw - 100px)) rotateX(-480deg) rotateY(-300deg) rotateZ(-200deg) scale(1.1);
+    opacity: 1;
+  }
+  85% {
+    top: calc(50vh - 20px);
+    transform: translateX(calc(50vw - 100px)) rotateX(-500deg) rotateY(-310deg) rotateZ(-210deg) scale(0.95);
+  }
+  100% {
+    top: calc(50vh - 30px);
+    transform: translateX(calc(50vw - 100px)) rotateX(-510deg) rotateY(-320deg) rotateZ(-215deg) scale(1);
+    opacity: 0.9;
+  }
+}
+
+/* Shadow that appears under the dice while it "lands" */
+.dice-3d::after {
+  content: '';
+  position: absolute;
+  bottom: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 56px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.35);
+  filter: blur(6px);
+  animation: diceShadow 0.95s ease forwards;
+}
+@keyframes diceShadow {
+  0%   { opacity: 0; transform: translateX(-50%) scaleX(0.3); }
+  70%  { opacity: 0.7; transform: translateX(-50%) scaleX(1); }
+  100% { opacity: 0.5; transform: translateX(-50%) scaleX(0.9); }
+}
+
   html, body {
     overflow: hidden;
     height: 100dvh;
