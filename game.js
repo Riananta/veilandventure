@@ -231,6 +231,35 @@ function mulaiPermainanBaru() {
 }
 
 // ────────────────────────────────────────────────────────────
+// SNAKE ORDER MAPPING
+// ────────────────────────────────────────────────────────────
+// Papan 10 kolom x 4 baris (40 kartu).
+// Baris 0 (bawah visual / row terakhir DOM): kartu 1–10, kiri→kanan
+// Baris 1: kartu 11–20, kanan→kiri
+// Baris 2: kartu 21–30, kiri→kanan
+// Baris 3 (atas): kartu 31–40, kanan→kiri
+//
+// DOM dirender baris atas ke bawah (baris 3 → 0), sehingga
+// slotIndex DOM = index dalam array yang dirender baris per baris dari atas.
+// Fungsi ini mengembalikan slotIndex DOM untuk posisi permainan (1-based).
+const COLS = 10;
+const ROWS = 4; // 40 / 10
+
+function posisiKeSlotDOM(pos1based) {
+  // pos1based: 1..40
+  const idx0 = pos1based - 1; // 0-based index logis (kiri-kanan selalu)
+  const row  = Math.floor(idx0 / COLS);         // baris logis 0 = bawah papan
+  const col  = idx0 % COLS;
+
+  // Baris ganjil (1,3,...) arahnya kanan→kiri
+  const colVisual = (row % 2 === 1) ? (COLS - 1 - col) : col;
+
+  // DOM dirender dari baris teratas (row logis tertinggi) ke bawah
+  const domRow = (ROWS - 1) - row;
+  return domRow * COLS + colVisual;
+}
+
+// ────────────────────────────────────────────────────────────
 // RENDER UTAMA
 // ────────────────────────────────────────────────────────────
 function renderPermainan() {
@@ -248,28 +277,44 @@ function renderPapan() {
   const board = document.getElementById('card-board');
   board.innerHTML = '';
 
+  // Buat array slot DOM (40 posisi) diisi null dulu
+  const domSlots = new Array(CARD_TOTAL).fill(null);
+
   G.cards.forEach((card, idx) => {
+    // idx = posisi logis 0-based (kartu ke-idx+1)
+    const domIdx = posisiKeSlotDOM(idx + 1);
+
     const slot = document.createElement('div');
     slot.className = 'card-slot';
+    // ID slot tetap berdasarkan posisi logis agar gerakPemain bisa menemukannya
     slot.id = `slot-${idx}`;
+    slot.dataset.domIdx = domIdx;
 
     const gameCard = document.createElement('div');
     gameCard.className = 'game-card' + (card.revealed ? ' flipped' : '');
 
-    // Sisi belakang
     const back = document.createElement('div');
     back.className = 'card-face card-back';
     gameCard.appendChild(back);
 
-    // Sisi depan
     const front = document.createElement('div');
     front.className = 'card-face card-front ' + getKelasFront(card);
     front.innerHTML = buatHTMLFrontKartu(card);
     gameCard.appendChild(front);
 
     slot.appendChild(gameCard);
-    board.appendChild(slot);
+
+    // Label posisi kecil di pojok untuk orientasi pemain
+    const posLabel = document.createElement('div');
+    posLabel.className = 'slot-pos-label';
+    posLabel.textContent = idx + 1;
+    slot.appendChild(posLabel);
+
+    domSlots[domIdx] = slot;
   });
+
+  // Tambahkan ke board dalam urutan DOM (atas-kiri ke bawah-kanan)
+  domSlots.forEach(slot => { if (slot) board.appendChild(slot); });
 }
 
 function getKelasFront(card) {
@@ -385,18 +430,24 @@ function renderKontrolDadu() {
   const rollBtn = document.getElementById('roll-btn');
   rollBtn.disabled = G.phase !== 'roll' || cp.finished;
 
-  // Tombol pakai kupon
+  // Tombol pakai kupon (hanya anti-red dan double-dice yang bisa diaktifkan sebelum roll)
   const area = document.getElementById('coupon-use-area');
   area.innerHTML = '';
-  if (cp.coupon && G.phase === 'roll') {
-    const icons = { 'anti-red': '🛡️', 'reroll': '🔁', 'double-dice': '🎲' };
-    const labels = { 'anti-red': 'Anti Merah', 'reroll': 'Lempar Ulang', 'double-dice': 'x2 Dadu' };
+  if (cp.coupon && G.phase === 'roll' && cp.coupon !== 'reroll') {
+    const icons = { 'anti-red': '🛡️', 'double-dice': '🎲' };
+    const labels = { 'anti-red': 'Anti Merah', 'double-dice': 'x2 Dadu' };
     const btn = document.createElement('button');
     btn.className = `btn btn-secondary btn-xs coupon-badge ${cp.coupon}`;
     btn.style.margin = '0';
     btn.textContent = `${icons[cp.coupon]} Pakai ${labels[cp.coupon]}`;
     btn.onclick = () => aktivasiKupon(cp.coupon);
     area.appendChild(btn);
+  } else if (cp.coupon === 'reroll' && G.phase === 'roll') {
+    // Tampilkan info bahwa reroll akan ditawarkan setelah roll
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:0.65rem;color:var(--text-dim);font-style:italic;text-align:center;padding:4px 0;';
+    info.textContent = '🔁 Kupon reroll aktif — akan ditawarkan setelah roll';
+    area.appendChild(info);
   }
 }
 
@@ -528,18 +579,87 @@ async function lemparDadu() {
 
   notifikasi(`🎲 ${cp.name} melempar ${G.useDoubleDice ? `${r1}+${r2}=` : ''}${total}`, 'info');
 
+  // Jika sedang dalam mode reroll (kupon sudah diaktifkan sebelumnya): langsung gerak
   if (G.pendingReroll) {
     G.pendingReroll = false;
-    G.phase = 'roll';
-    document.getElementById('roll-btn').disabled = false;
-    document.getElementById('roll-btn').textContent = '🔁 Lempar Ulang!';
-    notifikasi('🔁 Kupon dipakai! Lempar lagi.', 'success');
+    G.useDoubleDice = false;
+    await tidur(800);
+    await gerakkanPemain(cp, total);
     return;
   }
 
   G.useDoubleDice = false;
+
+  // Jika pemain punya kupon reroll, tanya dulu sebelum bergerak
+  if (cp.coupon === 'reroll') {
+    await tidur(500);
+    tampilkanModalReroll(cp, total);
+    return;
+  }
+
   await tidur(1000);
   await gerakkanPemain(cp, total);
+}
+
+// Modal konfirmasi penggunaan kupon reroll
+function tampilkanModalReroll(player, total) {
+  G.phase = 'reroll-confirm';
+  G._pendingRerollPlayer = player;
+  G._pendingRerollTotal  = total;
+
+  // Buat overlay konfirmasi sederhana
+  let overlay = document.getElementById('reroll-confirm-modal');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'reroll-confirm-modal';
+    overlay.className = 'modal-overlay';
+    overlay.innerHTML = `
+      <div class="modal" style="max-width:360px;text-align:center;">
+        <div class="modal-title">🔁 Gunakan Kupon Lempar Ulang?</div>
+        <p id="reroll-confirm-desc" style="font-size:0.88rem;color:var(--text-muted);margin-bottom:24px;line-height:1.6;"></p>
+        <div style="display:flex;gap:10px;">
+          <button class="btn btn-primary" style="flex:1" onclick="konfirmasiReroll(true)">🔁 Ya, Lempar Ulang!</button>
+          <button class="btn btn-secondary" style="flex:1" onclick="konfirmasiReroll(false)">✓ Tidak, Lanjutkan</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+  }
+
+  const desc = document.getElementById('reroll-confirm-desc');
+  desc.innerHTML = `Hasil dadu kamu: <strong style="color:var(--gold);font-size:1.1rem;">${total}</strong><br><br>
+    Apakah kamu ingin menggunakan <strong style="color:#5dade2;">Kupon Lempar Ulang</strong> untuk melempar dadu lagi?<br>
+    <span style="font-size:0.75rem;color:var(--text-dim);margin-top:6px;display:block;">Kupon akan habis terpakai.</span>`;
+
+  overlay.classList.remove('hidden');
+}
+
+async function konfirmasiReroll(pakai) {
+  const overlay = document.getElementById('reroll-confirm-modal');
+  if (overlay) overlay.classList.add('hidden');
+
+  const player = G._pendingRerollPlayer;
+  const total  = G._pendingRerollTotal;
+  G._pendingRerollPlayer = null;
+  G._pendingRerollTotal  = null;
+
+  if (pakai) {
+    // Pakai kupon: buang kupon, aktifkan pendingReroll, kembali ke fase roll
+    player.coupon = null;
+    G.pendingReroll = true;
+    G.phase = 'roll';
+    const rollBtn = document.getElementById('roll-btn');
+    rollBtn.disabled = false;
+    rollBtn.textContent = '🔁 Lempar Ulang!';
+    renderKuponSidebar();
+    renderKontrolDadu();
+    notifikasi('🔁 Kupon dipakai! Lempar lagi.', 'success');
+  } else {
+    // Tidak pakai: lanjut bergerak dengan hasil sebelumnya
+    G.phase = 'move';
+    await tidur(400);
+    await gerakkanPemain(player, total);
+  }
 }
 
 // ────────────────────────────────────────────────────────────

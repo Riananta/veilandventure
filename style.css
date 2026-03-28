@@ -36,6 +36,7 @@
 
 html, body {
   height: 100%;
+  height: 100dvh;
   background: var(--bg-deep);
   color: var(--text-light);
   font-family: var(--font-body);
@@ -321,6 +322,7 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
     "header header"
     "sidebar board";
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
   background: var(--bg-deep);
 }
@@ -563,6 +565,9 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
   overflow-y: auto;
   display: flex; flex-direction: column; gap: 16px;
   position: relative;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 #card-board {
@@ -1035,6 +1040,23 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
 }
 
 /* ============================================================
+   POSITION LABEL ON CARDS (snake order helper)
+   ============================================================ */
+.slot-pos-label {
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.42rem;
+  font-weight: 700;
+  color: rgba(255,255,255,0.22);
+  pointer-events: none;
+  z-index: 3;
+  line-height: 1;
+}
+.card-slot:hover .slot-pos-label { color: rgba(255,255,255,0.45); }
+
+/* ============================================================
    SCROLLBAR
    ============================================================ */
 ::-webkit-scrollbar { width: 6px; }
@@ -1073,24 +1095,114 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
 }
 
 /* ============================================================
-   RESPONSIVE
+   RESPONSIVE — TABLET & MOBILE
    ============================================================ */
-@media (max-width: 768px) {
+
+/* Tablet portrait (768px–1024px) */
+@media (max-width: 1024px) and (min-width: 561px) {
   #game-screen {
-    grid-template-columns: 180px 1fr;
+    grid-template-columns: 190px 1fr;
+    height: 100svh; /* safe viewport height for tablets */
+    overflow: hidden;
+  }
+  #board-area {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #game-sidebar {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   #card-board {
-    grid-template-columns: repeat(8, 1fr);
+    grid-template-columns: repeat(10, 1fr);
   }
 }
-@media (max-width: 560px) {
+
+/* Tablet landscape — allow board to scroll properly */
+@media (max-height: 600px) and (min-width: 561px) {
+  html, body {
+    overflow: hidden;
+    height: 100%;
+    height: 100dvh;
+  }
   #game-screen {
+    height: 100dvh;
+    overflow: hidden;
+  }
+  #board-area {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  #game-sidebar {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  .card-slot {
+    min-height: 52px;
+  }
+}
+
+/* Mobile portrait (≤560px) */
+@media (max-width: 560px) {
+  html, body {
+    overflow-y: auto;
+    height: auto;
+    min-height: 100dvh;
+  }
+  #game-screen {
+    display: grid;
     grid-template-columns: 1fr;
     grid-template-rows: auto auto 1fr;
     grid-template-areas:
       "header"
       "sidebar"
       "board";
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
   }
-  #game-sidebar { flex-direction: row; overflow-x: auto; }
+  #game-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+  #board-area {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  #card-board {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}
+
+/* Very small landscape phones */
+@media (max-width: 767px) and (orientation: landscape) {
+  html, body {
+    overflow: hidden;
+    height: 100dvh;
+  }
+  #game-screen {
+    grid-template-columns: 160px 1fr;
+    grid-template-rows: auto 1fr;
+    height: 100dvh;
+    overflow: hidden;
+  }
+  #board-area {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  #game-sidebar {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    font-size: 0.8em;
+  }
+  #card-board {
+    grid-template-columns: repeat(10, 1fr);
+  }
+  .card-slot { min-height: 46px; }
 }
