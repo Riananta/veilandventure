@@ -55,7 +55,7 @@ let G = {
 // DEFAULT PEMAIN
 // ────────────────────────────────────────────────────────────
 const DEFAULT_COLORS = ['#c0392b','#2980b9','#27ae60','#e67e22'];
-const DEFAULT_NAMES  = ['Merah','Biru','Hijau','Oranye'];
+const DEFAULT_NAMES  = ['Player 1','Player 2','Player 3','Player 4'];
 
 // ────────────────────────────────────────────────────────────
 // SISTEM AUDIO
@@ -254,7 +254,7 @@ function perbaruiPengaturanPemain() {
     row.innerHTML = `
       <span class="player-num-badge">${i+1}</span>
       <input class="form-input" type="text" id="pname-${i}"
-             placeholder="${DEFAULT_NAMES[i]}" value="${DEFAULT_NAMES[i]}" maxlength="16">
+             placeholder="${DEFAULT_NAMES[i]}" value="" maxlength="16">
       <input type="color" id="pcolor-${i}" value="${DEFAULT_COLORS[i]}">
     `;
     list.appendChild(row);
