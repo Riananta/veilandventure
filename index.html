@@ -3,7 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>VEIL & VENTURE — Card Trail Game</title>
+<title>VEIL &amp; VENTURE — Card Trail Game</title>
+
+<!-- ── PWA Manifest ── -->
+<link rel="manifest" href="manifest.json">
+
+<!-- ── Theme color (address bar di Android) ── -->
+<meta name="theme-color" content="#c9a84c">
+
+<!-- ── iOS / Safari PWA meta ── -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Veil &amp; Venture">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<!-- ── Deskripsi untuk SEO / share ── -->
+<meta name="description" content="Telusuri jalur tersembunyi. Tantang kartu. Keberuntungan berpihak pada yang berani.">
+
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -208,5 +224,16 @@
 <div id="notification-area"></div>
 
 <script src="game.js"></script>
+
+<!-- ── Registrasi Service Worker (PWA offline support) ── -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('[PWA] Service Worker terdaftar:', reg.scope))
+        .catch(err => console.warn('[PWA] Registrasi gagal:', err));
+    });
+  }
+</script>
 </body>
 </html>
