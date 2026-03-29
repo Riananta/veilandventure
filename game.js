@@ -85,10 +85,12 @@ const Audio_ = (() => {
       dice:    'audio/dice_roll.mp3',
       card:    'audio/card_flip.mp3',
       walk:    'audio/footstep.mp3',
+      walkfail:    'audio/footstep_fail.mp3',
       special: 'audio/special.mp3',
       modal:   'audio/modal_open.mp3',
       btn:     'audio/btn_click.mp3',
       finish:  'audio/finish.mp3',
+      fail:    'audio/fail.mp3',
     };
     const vols = {
       dice:0.70, card:0.75, walk:0.55, special:0.80,
@@ -709,7 +711,7 @@ async function lemparDadu() {
   const total = G.useDoubleDice ? r1 + r2 : r1;
   document.getElementById('dice-total').textContent = total;
 
-  notifikasi(`🎲 ${cp.name} melempar ${G.useDoubleDice ? `${r1}+${r2}=` : ''}${total}`, 'info');
+  // notifikasi(`🎲 ${cp.name} melempar ${G.useDoubleDice ? `${r1}+${r2}=` : ''}${total}`, 'info');
 
   // Jika sedang dalam mode reroll: langsung gerak
   if (G.pendingReroll) {
@@ -879,7 +881,7 @@ function tampilkanAksiKartu(card, sudahTerbuka) {
 
 function deskripsiKartu(card) {
   if (card.type === 'joker') return '🃏 JOKER — Lempar dadu bonus!';
-  if (card.type === 'spade-ace') return '♠ Ace of Spades — Pilih kupon berkah!';
+  if (card.type === 'spade-ace') return '♠ Ace of Spades — Pilih kupon!';
   if (card.type === 'black') {
     const suit = SUITS[card.suit];
     return `${suit.symbol} ${card.rank} ${suit.name} — Aman, berhenti di sini.`;
@@ -919,11 +921,12 @@ async function aksiKartu() {
 async function terapkanEfekKartu(player, card, slotIdx) {
   if (card.type === 'black') {
     const suit = SUITS[card.suit];
-    notifikasi(`${suit.symbol} ${player.name} aman di ${suit.name}!`, 'info');
+    // notifikasi(`${suit.symbol} ${player.name} aman di ${suit.name}!`, 'info');
     await tidur(600);
     gilirBerikutnya();
 
   } else if (card.type === 'red') {
+    Audio_.playSFX('fail');
     const suit = SUITS[card.suit];
     const val = RANK_VALUES[card.rank];
 
@@ -965,7 +968,7 @@ async function terapkanEfekKartu(player, card, slotIdx) {
       gilirBerikutnya();
     } else {
       Audio_.playSFX('special');
-      notifikasi(`♠ ${player.name} menemukan Ace of Spades! Pilih berkah!`, 'special');
+      notifikasi(`♠ ${player.name} menemukan Ace of Spades! Pilih kupon!`, 'special');
       await tidur(400);
       tampilkanModalKupon(player);
     }
@@ -1035,7 +1038,7 @@ async function prosesUndurMerah(player, val) {
   const backPos = Math.max(0, player.position - val);
   for (let p = player.position - 1; p >= backPos; p--) {
     player.position = p;
-    Audio_.playSFX('walk');
+    Audio_.playSFX('walkfail');
     renderToken();
     await tidur(400);
   }
@@ -1160,11 +1163,11 @@ async function periksaSelesai() {
 }
 
 // ────────────────────────────────────────────────────────────
-// MENYERAH — semua pemain dapat 1 poin, game berakhir
+// MENYERAH — semua pemain tidak akan mendapat poin, game berakhir
 // ────────────────────────────────────────────────────────────
 function konfirmasiMenyerah() {
   Audio_.playSFX('btn');
-  if (!confirm('🏳 Menyerah?\n\nPermainan akan berakhir. Semua pemain mendapat 1 poin.')) return;
+  if (!confirm('🏳 Menyerah?\n\nPermainan akan berakhir. Semua pemain tidak akan mendapat poin.')) return;
   menyerah();
 }
 
@@ -1179,10 +1182,9 @@ function menyerah() {
     p.finished = true;
     p.finishRank = rankMenyerah;
     G.finishedPlayers.push(p.id);
-    // Hanya pemain yang belum finish yang mendapat +1 poin
-    G.totalScores[p.id] = (G.totalScores[p.id] || 0) + 1;
+    // Hanya pemain yang belum finish
+    G.totalScores[p.id] = (G.totalScores[p.id] || 0) + 0;
   });
-  // Pemain yang sudah finish TIDAK mendapat poin tambahan — poin mereka sudah dihitung saat finish
 
   G.phase = 'done';
 
