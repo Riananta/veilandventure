@@ -3,10 +3,10 @@
   "short_name": "Veil & Venture",
   "description": "Telusuri jalur tersembunyi. Tantang kartu. Keberuntungan berpihak pada yang berani.",
   "start_url": "./index.html",
-  "display": "standalone",
+  "display": "fullscreen",
   "orientation": "landscape",
   "background_color": "#0d0a14",
-  "theme_color": "#c9a84c",
+  "theme_color": "#0d0a14",
   "lang": "id",
   "categories": ["games", "entertainment"],
   "icons": [

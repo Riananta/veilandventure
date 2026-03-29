@@ -8,14 +8,17 @@
 <!-- ── PWA Manifest ── -->
 <link rel="manifest" href="manifest.json">
 
-<!-- ── Theme color (address bar di Android) ── -->
-<meta name="theme-color" content="#c9a84c">
+<!-- ── Theme color: gelap agar topbar menyatu dengan game ── -->
+<meta name="theme-color" content="#0d0a14">
 
-<!-- ── iOS / Safari PWA meta ── -->
+<!-- ── iOS / Safari PWA fullscreen ── -->
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Veil &amp; Venture">
 <link rel="apple-touch-icon" href="icons/icon-192.png">
+
+<!-- ── Viewport: cover seluruh layar termasuk notch/cutout ── -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
 <!-- ── Deskripsi untuk SEO / share ── -->
 <meta name="description" content="Telusuri jalur tersembunyi. Tantang kartu. Keberuntungan berpihak pada yang berani.">
@@ -227,6 +230,7 @@
 
 <!-- ── Registrasi Service Worker (PWA offline support) ── -->
 <script>
+  /* Service Worker */
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker.register('./sw.js')
@@ -234,6 +238,30 @@
         .catch(err => console.warn('[PWA] Registrasi gagal:', err));
     });
   }
+
+  /* Fullscreen API — aktif saat tap pertama (butuh gesture user) */
+  function masukFullscreen() {
+    const el = document.documentElement;
+    const req = el.requestFullscreen
+      || el.webkitRequestFullscreen
+      || el.mozRequestFullScreen
+      || el.msRequestFullscreen;
+    if (req) req.call(el).catch(() => {});
+  }
+
+  /* Coba fullscreen otomatis saat load (hanya berhasil jika ada interaksi sebelumnya) */
+  window.addEventListener('load', () => masukFullscreen());
+
+  /* Fallback: tap/klik pertama di mana saja akan memicu fullscreen */
+  document.addEventListener('click', function onFirstClick() {
+    masukFullscreen();
+    document.removeEventListener('click', onFirstClick);
+  }, { once: true });
+
+  document.addEventListener('touchstart', function onFirstTouch() {
+    masukFullscreen();
+    document.removeEventListener('touchstart', onFirstTouch);
+  }, { once: true });
 </script>
 </body>
 </html>
