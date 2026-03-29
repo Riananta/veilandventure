@@ -91,6 +91,7 @@ const Audio_ = (() => {
       btn:     'audio/btn_click.mp3',
       finish:  'audio/finish.mp3',
       fail:    'audio/fail.mp3',
+      win:    'audio/win.mp3',
     };
     const vols = {
       dice:0.70, card:0.75, walk:0.55, special:0.80,
@@ -258,6 +259,10 @@ function perbaruiPengaturanPemain() {
       <input class="form-input" type="text" id="pname-${i}"
              placeholder="${DEFAULT_NAMES[i]}" value="" maxlength="16">
       <input type="color" id="pcolor-${i}" value="${DEFAULT_COLORS[i]}">
+      <label class="bot-toggle-label" title="Mainkan sebagai Bot">
+        <input type="checkbox" id="pbot-${i}" class="bot-checkbox">
+        <span class="bot-toggle-pill">🤖</span>
+      </label>
     `;
     list.appendChild(row);
   }
@@ -270,24 +275,35 @@ function mulaiPermainanBaru() {
   Audio_.playSFX('btn');
   const count = parseInt(document.getElementById('player-count').value);
   const sessionName = document.getElementById('game-session-name').value.trim() || `Sesi ${new Date().toLocaleDateString('id-ID')}`;
-  const players = [];
 
+  // Validasi: minimal 1 pemain manusia
+  let adaManusia = false;
   for (let i = 0; i < count; i++) {
-    const name = document.getElementById(`pname-${i}`).value.trim() || DEFAULT_NAMES[i];
+    if (!document.getElementById(`pbot-${i}`).checked) { adaManusia = true; break; }
+  }
+  if (!adaManusia) {
+    notifikasi('⚠️ Minimal 1 pemain harus bukan Bot!', 'danger');
+    return;
+  }
+
+  const players = [];
+  for (let i = 0; i < count; i++) {
+    const name  = document.getElementById(`pname-${i}`).value.trim() || DEFAULT_NAMES[i];
     const color = document.getElementById(`pcolor-${i}`).value;
+    const isBot = document.getElementById(`pbot-${i}`).checked;
     players.push({
       id: i,
-      name,
+      name: isBot ? `🤖 ${name}` : name,
       color,
       position: 0,
       coupon: null,
       finished: false,
       finishRank: null,
       initials: name.substring(0, 2).toUpperCase(),
+      isBot,
     });
   }
 
-  // totalScores harus array paralel dengan players, index = player.id
   const totalScores = players.map(() => 0);
 
   G = {
@@ -315,6 +331,11 @@ function mulaiPermainanBaru() {
 
   renderPermainan();
   notifikasi(`✦ ${sessionName} dimulai!`, 'special');
+
+  // Jalankan bot jika pemain pertama adalah bot
+  if (G.players[0].isBot) {
+    setTimeout(() => jalankanBot(), 1000);
+  }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -736,10 +757,16 @@ async function lemparDadu() {
 }
 
 // Modal konfirmasi penggunaan kupon reroll
-function tampilkanModalReroll(player, total) {
+async function tampilkanModalReroll(player, total) {
   G.phase = 'reroll-confirm';
   G._pendingRerollPlayer = player;
   G._pendingRerollTotal  = total;
+
+  // Jika pemain adalah bot, bypass modal dan ambil keputusan otomatis
+  if (player.isBot) {
+    await botKonfirmasiReroll(player, total);
+    return;
+  }
 
   // Buat overlay konfirmasi sederhana
   let overlay = document.getElementById('reroll-confirm-modal');
@@ -961,6 +988,10 @@ async function terapkanEfekKartu(player, card, slotIdx) {
     rollBtn.textContent = '🃏 Lempar Bonus!';
     renderKontrolDadu();
 
+    // Jika giliran bot, jalankan otomatis setelah jeda sebentar
+    if (G.players[G.currentTurn].isBot) {
+      setTimeout(() => jalankanBot(), 900);
+    }
   } else if (card.type === 'spade-ace') {
     if (player.coupon) {
       notifikasi(`♠ Ace of Spades — ${player.name} sudah punya kupon!`, 'info');
@@ -978,9 +1009,15 @@ async function terapkanEfekKartu(player, card, slotIdx) {
 // ────────────────────────────────────────────────────────────
 // MODAL ANTI-RED (ditawarkan saat mendarat di kartu merah)
 // ────────────────────────────────────────────────────────────
-function tampilkanModalAntiRed(player, card, slotIdx, suit, val) {
+async function tampilkanModalAntiRed(player, card, slotIdx, suit, val) {
   G.phase = 'anti-red-confirm';
   G._pendingAntiRedCtx = { player, card, slotIdx, suit, val };
+
+  // Jika pemain adalah bot, bypass modal dan ambil keputusan otomatis
+  if (player.isBot) {
+    await botKonfirmasiAntiRed(player, card, slotIdx, suit, val);
+    return;
+  }
 
   let overlay = document.getElementById('antired-confirm-modal');
   if (!overlay) {
@@ -1091,6 +1128,11 @@ function tampilkanModalKupon(player) {
 
   document.getElementById('coupon-modal').classList.remove('hidden');
   Audio_.playSFX('modal');
+
+  // Jika pemain adalah bot, pilih amplop secara otomatis
+  if (player.isBot) {
+    botPilihKupon();
+  }
 }
 
 function buka_amplop(envEl, type) {
@@ -1247,6 +1289,92 @@ function tampilkanRekapMenyerah(sudahSelesai, belumSelesai) {
 }
 
 // ────────────────────────────────────────────────────────────
+// BOT ENGINE
+// Bot bermain otomatis: lempar dadu, ambil keputusan kupon,
+// konfirmasi reroll & anti-red tanpa interaksi manusia.
+// Tingkat kecerdasan: sederhana — pakai kupon secara oportunistik.
+// ────────────────────────────────────────────────────────────
+async function jalankanBot() {
+  const cp = G.players[G.currentTurn];
+  if (!cp || !cp.isBot || G.phase !== 'roll' || cp.finished) return;
+
+  // Bot aktifkan double-dice jika punya
+  if (cp.coupon === 'double-dice') {
+    await tidur(400);
+    aktivasiKupon('double-dice');
+    await tidur(300);
+  }
+
+  // Bot lempar dadu
+  await lemparDadu();
+}
+
+// Dipanggil dari tampilkanModalReroll ketika pemain adalah bot
+async function botKonfirmasiReroll(player, total) {
+  // Bot selalu pakai reroll jika total ≤ 3 (hasil buruk), tolak jika > 3
+  const pakai = total <= 3;
+  await tidur(700);
+  // Tutup modal reroll jika ada
+  const overlay = document.getElementById('reroll-confirm-modal');
+  if (overlay) overlay.classList.add('hidden');
+
+  G._pendingRerollPlayer = null;
+  G._pendingRerollTotal  = null;
+
+  if (pakai) {
+    player.coupon = null;
+    G.pendingReroll = true;
+    G.phase = 'roll';
+    const rollBtn = document.getElementById('roll-btn');
+    if (rollBtn) rollBtn.textContent = '🔁 Lempar Ulang!';
+    renderKuponSidebar();
+    renderKontrolDadu();
+    notifikasi(`🔁 ${player.name} (Bot) pakai Lempar Ulang! (dadu=${total})`, 'success');
+    await tidur(600);
+    await lemparDadu();
+  } else {
+    notifikasi(`🤖 ${player.name} simpan Reroll (dadu=${total} — cukup bagus)`, 'info');
+    G.phase = 'move';
+    await tidur(400);
+    await gerakkanPemain(player, total);
+  }
+}
+
+// Dipanggil dari tampilkanModalAntiRed ketika pemain adalah bot
+async function botKonfirmasiAntiRed(player, card, slotIdx, suit, val) {
+  // Bot selalu pakai Anti Merah
+  await tidur(700);
+  const overlay = document.getElementById('antired-confirm-modal');
+  if (overlay) overlay.classList.add('hidden');
+  G._pendingAntiRedCtx = null;
+
+  player.coupon = null;
+  renderKuponSidebar();
+  notifikasi(`🛡️ ${player.name} (Bot) pakai Anti Merah — ${suit.symbol} ${card.rank} diblokir!`, 'success');
+  await tidur(700);
+  gilirBerikutnya();
+}
+
+// Bot memilih kupon amplop secara acak (tidak bisa melihat isi)
+async function botPilihKupon() {
+  await tidur(800);
+  const envelopes = document.querySelectorAll('.coupon-envelope');
+  if (!envelopes.length) return;
+  const pilihan = envelopes[Math.floor(Math.random() * envelopes.length)];
+  const type = pilihan.dataset.type;
+  if (pilihan && type) {
+    Audio_.playSFX('card');
+    pilihan.classList.add('revealed');
+    document.querySelectorAll('.coupon-envelope').forEach(e => {
+      if (e !== pilihan) e.style.opacity = '0.4';
+      e.style.pointerEvents = 'none';
+    });
+    await tidur(900);
+    pilihanKupon(type);
+  }
+}
+
+// ────────────────────────────────────────────────────────────
 // MANAJEMEN GILIRAN
 // ────────────────────────────────────────────────────────────
 function gilirBerikutnya() {
@@ -1273,6 +1401,11 @@ function gilirBerikutnya() {
   renderToken();
 
   notifikasi(`◈ Giliran ${G.players[G.currentTurn].name}`, 'info');
+
+  // Jika giliran bot, jalankan otomatis setelah jeda sebentar
+  if (G.players[G.currentTurn].isBot) {
+    setTimeout(() => jalankanBot(), 900);
+  }
 }
 
 // ────────────────────────────────────────────────────────────
@@ -1315,6 +1448,7 @@ function tampilkanRekap() {
 
   document.getElementById('recap-content').innerHTML = podiumHTML + listHTML;
   Audio_.playSFX('modal');
+  Audio_.playSFX('win');
   document.getElementById('recap-modal').classList.remove('hidden');
 }
 

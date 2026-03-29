@@ -279,6 +279,37 @@ body::before {
 .player-setup-row .form-input {
   flex: 1; padding: 8px 10px; font-size: 0.9rem;
 }
+
+/* Bot toggle pill */
+.bot-toggle-label {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+}
+.bot-checkbox {
+  display: none;
+}
+.bot-toggle-pill {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border-soft);
+  background: rgba(0,0,0,0.3);
+  font-size: 1rem;
+  opacity: 0.35;
+  transition: var(--transition);
+}
+.bot-checkbox:checked + .bot-toggle-pill {
+  opacity: 1;
+  background: rgba(41,128,185,0.2);
+  border-color: rgba(41,128,185,0.5);
+  box-shadow: 0 0 10px rgba(41,128,185,0.3);
+}
 input[type="color"] {
   -webkit-appearance: none;
   width: 36px; height: 36px;
