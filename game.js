@@ -283,7 +283,6 @@ function mulaiPermainanBaru() {
   }
   if (!adaManusia) {
     notifikasi('⚠️ Minimal 1 pemain harus bukan Bot!', 'danger');
-    return;
   }
 
   const players = [];
