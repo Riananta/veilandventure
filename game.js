@@ -372,6 +372,11 @@ function renderPermainan() {
   renderPapan();
   renderSidebar();
   renderToken();
+  _lastAutoScrollPos = null;
+  // Gulir ke posisi pemain yang sedang giliran saat papan baru dirender
+  // (mulai permainan, ronde baru, atau memuat simpanan).
+  const cp = G.players[G.currentTurn];
+  if (cp) gulirKeSlot(cp.position, { instant: true, force: true });
 }
 
 function renderHeader() {
@@ -558,6 +563,41 @@ function renderKontrolDadu() {
     info.style.cssText = 'font-size:0.65rem;color:var(--text-dim);font-style:italic;text-align:center;padding:4px 0;';
     info.textContent = '🛡️ Ditawarkan saat kena kartu merah';
     area.appendChild(info);
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// AUTO-SCROLL KE POSISI PEMAIN
+// ────────────────────────────────────────────────────────────
+// Menggulirkan area papan (dan sidebar bila perlu) secara otomatis
+// agar slot/token pemain yang sedang bergerak selalu terlihat,
+// tanpa pemain harus scroll manual.
+let _lastAutoScrollPos = null;
+function gulirKeSlot(pos, opts = {}) {
+  const { instant = false, force = false } = opts;
+
+  // Hindari scroll berulang untuk posisi yang sama persis
+  if (!force && _lastAutoScrollPos === pos) return;
+  _lastAutoScrollPos = pos;
+
+  let target = null;
+  if (pos <= 0) {
+    target = document.getElementById('start-zone') || document.getElementById('start-tokens');
+  } else {
+    const slotIdx = Math.min(pos, CARD_TOTAL) - 1;
+    target = document.getElementById(`slot-${slotIdx}`);
+  }
+  if (!target) return;
+
+  try {
+    target.scrollIntoView({
+      behavior: instant ? 'auto' : 'smooth',
+      block: 'center',
+      inline: 'center',
+    });
+  } catch (e) {
+    // Fallback untuk browser lama yang tidak dukung opsi objek
+    target.scrollIntoView();
   }
 }
 
@@ -838,6 +878,7 @@ async function gerakkanPemain(player, steps) {
     player.position = p;
     Audio_.playSFX('walk');
     renderToken();
+    gulirKeSlot(p);
     const slotEl = document.getElementById(`slot-${p - 1}`);
     if (slotEl) slotEl.classList.add('highlight');
     await tidur(400);
@@ -1088,6 +1129,7 @@ async function prosesUndurMerah(player, val) {
     player.position = p;
     Audio_.playSFX('walkfail');
     renderToken();
+    gulirKeSlot(p);
     await tidur(400);
   }
   await tidur(400);
@@ -1412,6 +1454,9 @@ function gilirBerikutnya() {
 
   renderSidebar();
   renderToken();
+  // Langsung gulir ke posisi pemain giliran berikutnya (tanpa animasi
+  // smooth, karena ini pergantian giliran, bukan pergerakan token).
+  gulirKeSlot(G.players[G.currentTurn].position, { instant: true, force: true });
 
   notifikasi(`◈ Giliran ${G.players[G.currentTurn].name}`, 'info');
 
