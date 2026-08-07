@@ -632,6 +632,12 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; }
   position: relative;
   border-radius: var(--radius-card);
   cursor: default;
+  /* Jarak aman agar auto-scroll ke posisi token tidak mepet tepi layar */
+  scroll-margin: 90px;
+}
+
+#start-zone {
+  scroll-margin: 90px;
 }
 
 .game-card {
