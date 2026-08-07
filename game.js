@@ -20,10 +20,12 @@ const RANK_VALUES = {
 
 const DICE_FACES = ['⚀','⚁','⚂','⚃','⚄','⚅'];
 
-const CARD_TOTAL = 40;
+const CARD_TOTAL = 100;
 
-// Poin berdasarkan peringkat selesai
-const RANK_POINTS = [3, 2, 1, 0];
+// Poin berdasarkan peringkat selesai (indeks 0 = juara 1, dst).
+// Juara 1 & 2 diuntungkan lebih besar, juara 3 masih lumayan,
+// sisanya menurun tipis-tipis agar tetap kompetitif sampai akhir.
+const RANK_POINTS = [20, 15, 10, 7, 5, 3, 1];
 
 const SAVE_KEY_PREFIX = 'veilventure_save_';
 const SAVE_LIST_KEY   = 'veilventure_savelist';
@@ -36,6 +38,7 @@ let G = {
   cards: [],
   currentTurn: 0,
   gameCount: 1,
+  totalRounds: 1,
   difficulty: 'easy',
   sessionName: '',
   totalScores: [],
@@ -54,8 +57,8 @@ let G = {
 // ────────────────────────────────────────────────────────────
 // DEFAULT PEMAIN
 // ────────────────────────────────────────────────────────────
-const DEFAULT_COLORS = ['#c0392b','#2980b9','#27ae60','#e67e22'];
-const DEFAULT_NAMES  = ['Player 1','Player 2','Player 3','Player 4'];
+const DEFAULT_COLORS = ['#c0392b','#2980b9','#27ae60','#e67e22','#8e44ad','#16a085','#d4ac0d'];
+const DEFAULT_NAMES  = ['Player 1','Player 2','Player 3','Player 4','Player 5','Player 6','Player 7'];
 
 // ────────────────────────────────────────────────────────────
 // SISTEM AUDIO
@@ -159,19 +162,39 @@ function tidur(ms) { return new Promise(r => setTimeout(r, ms)); }
 // ────────────────────────────────────────────────────────────
 // BUAT DECK KARTU
 // ────────────────────────────────────────────────────────────
+// Jumlah joker, Ace of Spades (kartu "waru" spesial), dan kartu merah
+// per tingkat kesulitan. Total selalu = CARD_TOTAL (100).
+// - Kartu merah SELALU peringkat A–7 saja di semua level — yang membedakan
+//   antar level hanyalah JUMLAHnya (makin sulit, makin banyak kartu merah).
+// - Joker & Ace of Spades juga bertambah tiap level naik, tapi jumlahnya
+//   selalu jauh lebih sedikit dari kartu merah (secukupnya saja).
+function konfigurasiDeck(difficulty) {
+  if (difficulty === 'easy')   return { joker: 5, spadeAce: 3, red: 25 };
+  if (difficulty === 'medium') return { joker: 7, spadeAce: 4, red: 40 };
+  /* hard */                   return { joker: 9, spadeAce: 5, red: 55 };
+}
+
 function buatDeck(difficulty) {
   const deck = [];
+  const cfg = konfigurasiDeck(difficulty);
 
-  // 4 joker
-  for (let i = 0; i < 4; i++) {
+  const jokerCount    = cfg.joker;
+  const spadeAceCount = cfg.spadeAce;
+  const redCount      = cfg.red;
+  const blackCount    = CARD_TOTAL - jokerCount - spadeAceCount - redCount;
+
+  // Joker
+  for (let i = 0; i < jokerCount; i++) {
     deck.push({ type: 'joker', suit: null, rank: null, id: `joker-${i}` });
   }
 
-  // Ace of Spades khusus
-  deck.push({ type: 'spade-ace', suit: 'spade', rank: 'A', id: 'spade-ace' });
+  // Ace of Spades khusus (bisa lebih dari satu di papan seiring naik level)
+  for (let i = 0; i < spadeAceCount; i++) {
+    deck.push({ type: 'spade-ace', suit: 'spade', rank: 'A', id: `spade-ace-${i}` });
+  }
 
   const blackRanks = ['2','3','4','5','6','7','8','9','10','J','Q','K','A'];
-  const redRanks   = ['A','2','3','4','5','6','7','8','9','10','J','Q','K'];
+  const redRanks   = ['A','2','3','4','5','6','7']; // hanya A–7, di semua level
 
   let blackPool = [];
   let redPool   = [];
@@ -189,24 +212,6 @@ function buatDeck(difficulty) {
   }
 
   acak(redPool); acak(blackPool);
-
-  let blackCount, redCount;
-  if (difficulty === 'easy')        { blackCount = 25; redCount = 10; }
-  else if (difficulty === 'medium') { blackCount = 18; redCount = 17; }
-  else                               { blackCount = 10; redCount = 25; }
-
-  if (difficulty === 'hard') {
-    const highRed = ['10','J','Q','K'];
-    redPool.sort((a, b) => {
-      return (highRed.includes(a.rank) ? 0 : 1) - (highRed.includes(b.rank) ? 0 : 1);
-    });
-  }
-  if (difficulty === 'easy') {
-    const lowRed = ['A','2','3','4','5'];
-    redPool.sort((a, b) => {
-      return (lowRed.includes(a.rank) ? 0 : 1) - (lowRed.includes(b.rank) ? 0 : 1);
-    });
-  }
 
   for (let i = 0; i < blackCount; i++) {
     deck.push({ ...blackPool[i % blackPool.length], id: `black-${i}` });
@@ -275,15 +280,8 @@ function mulaiPermainanBaru() {
   Audio_.playSFX('btn');
   const count = parseInt(document.getElementById('player-count').value);
   const sessionName = document.getElementById('game-session-name').value.trim() || `Sesi ${new Date().toLocaleDateString('id-ID')}`;
-
-  // Validasi: minimal 1 pemain manusia
-  let adaManusia = false;
-  for (let i = 0; i < count; i++) {
-    if (!document.getElementById(`pbot-${i}`).checked) { adaManusia = true; break; }
-  }
-  if (!adaManusia) {
-    notifikasi('⚠️ Minimal 1 pemain harus bukan Bot!', 'danger');
-  }
+  const roundCountEl = document.getElementById('round-count');
+  const totalRounds = roundCountEl ? parseInt(roundCountEl.value) || 1 : 1;
 
   const players = [];
   for (let i = 0; i < count; i++) {
@@ -310,6 +308,7 @@ function mulaiPermainanBaru() {
     cards: buatDeck(selectedDifficulty),
     currentTurn: 0,
     gameCount: 1,
+    totalRounds,
     difficulty: selectedDifficulty,
     sessionName,
     totalScores,
@@ -340,20 +339,19 @@ function mulaiPermainanBaru() {
 // ────────────────────────────────────────────────────────────
 // SNAKE ORDER MAPPING
 // ────────────────────────────────────────────────────────────
-// Papan 10 kolom x 4 baris (40 kartu).
+// Papan 10 kolom x 10 baris (100 kartu).
 // Baris 0 (bawah visual / row terakhir DOM): kartu 1–10, kiri→kanan
 // Baris 1: kartu 11–20, kanan→kiri
-// Baris 2: kartu 21–30, kiri→kanan
-// Baris 3 (atas): kartu 31–40, kanan→kiri
+// ...berkelok (snake) sampai baris 9 (atas): kartu 91–100
 //
-// DOM dirender baris atas ke bawah (baris 3 → 0), sehingga
+// DOM dirender baris atas ke bawah (baris 9 → 0), sehingga
 // slotIndex DOM = index dalam array yang dirender baris per baris dari atas.
 // Fungsi ini mengembalikan slotIndex DOM untuk posisi permainan (1-based).
 const COLS = 10;
-const ROWS = 4; // 40 / 10
+const ROWS = CARD_TOTAL / COLS; // 100 / 10 = 10
 
 function posisiKeSlotDOM(pos1based) {
-  // pos1based: 1..40
+  // pos1based: 1..100
   const idx0 = pos1based - 1; // 0-based index logis (kiri-kanan selalu)
   const row  = Math.floor(idx0 / COLS);         // baris logis 0 = bawah papan
   const col  = idx0 % COLS;
@@ -377,7 +375,9 @@ function renderPermainan() {
 }
 
 function renderHeader() {
-  document.getElementById('header-game-num').textContent = `${G.sessionName || 'Game'} #${G.gameCount}`;
+  const totalRounds = G.totalRounds || 1;
+  document.getElementById('header-game-num').textContent =
+    `${G.sessionName || 'Game'} — Ronde ${G.gameCount}/${totalRounds}`;
 }
 
 function renderPapan() {
@@ -870,11 +870,11 @@ async function gerakkanPemain(player, steps) {
   const slotIdx = newPos - 1;
 
   if (!card.revealed) {
-    G.pendingCardAction = { player, card, slotIdx };
+    G.pendingCardAction = { player, card, slotIdx, chained: false };
     G.phase = 'card-action';
     tampilkanAksiKartu(card, false);
   } else {
-    await terapkanEfekKartu(player, card, slotIdx);
+    await terapkanEfekKartu(player, card, slotIdx, false);
   }
 }
 
@@ -925,7 +925,7 @@ async function aksiKartu() {
   document.getElementById('card-action-modal').classList.add('hidden');
 
   if (!G.pendingCardAction) return;
-  const { player, card, slotIdx } = G.pendingCardAction;
+  const { player, card, slotIdx, chained } = G.pendingCardAction;
   G.pendingCardAction = null;
 
   // Buka kartu jika belum terbuka
@@ -938,13 +938,13 @@ async function aksiKartu() {
   }
 
   // Terapkan efek kartu
-  await terapkanEfekKartu(player, card, slotIdx);
+  await terapkanEfekKartu(player, card, slotIdx, !!chained);
 }
 
 // ────────────────────────────────────────────────────────────
 // EFEK KARTU
 // ────────────────────────────────────────────────────────────
-async function terapkanEfekKartu(player, card, slotIdx) {
+async function terapkanEfekKartu(player, card, slotIdx, chained = false) {
   if (card.type === 'black') {
     const suit = SUITS[card.suit];
     // notifikasi(`${suit.symbol} ${player.name} aman di ${suit.name}!`, 'info');
@@ -952,9 +952,21 @@ async function terapkanEfekKartu(player, card, slotIdx) {
     gilirBerikutnya();
 
   } else if (card.type === 'red') {
-    Audio_.playSFX('fail');
     const suit = SUITS[card.suit];
     const val = RANK_VALUES[card.rank];
+
+    // Kartu merah hasil dari mundur akibat kartu merah sebelumnya:
+    // efek mundur TIDAK berlaku lagi (maksimal 1x mundur per giliran),
+    // supaya pemain tidak bisa mundur berkali-kali secara beruntun.
+    if (chained) {
+      Audio_.playSFX('card');
+      notifikasi(`${suit.symbol} ${player.name} kena Merah lagi, tapi efek mundur diblokir (maks. 1x per giliran)!`, 'info');
+      await tidur(600);
+      gilirBerikutnya();
+      return;
+    }
+
+    Audio_.playSFX('fail');
 
     // Jika pemain punya kupon anti-red, tawarkan dulu
     if (player.coupon === 'anti-red') {
@@ -1083,7 +1095,9 @@ async function prosesUndurMerah(player, val) {
   if (player.position > 0) {
     const landedCard = G.cards[player.position - 1];
     const landedSlotIdx = player.position - 1;
-    G.pendingCardAction = { player, card: landedCard, slotIdx: landedSlotIdx };
+    // Jika kartu yang didarati lagi adalah kartu merah, tandai "chained"
+    // agar efek mundurnya tidak diterapkan lagi (cegah mundur berantai).
+    G.pendingCardAction = { player, card: landedCard, slotIdx: landedSlotIdx, chained: landedCard.type === 'red' };
     G.phase = 'card-action';
     tampilkanAksiKartu(landedCard, landedCard.revealed);
   } else {
@@ -1410,7 +1424,12 @@ function gilirBerikutnya() {
 // ────────────────────────────────────────────────────────────
 // REKAP & RONDE BERIKUTNYA
 // ────────────────────────────────────────────────────────────
+const MEDALS = ['①','②','③','④','⑤','⑥','⑦'];
+
 function tampilkanRekap() {
+  const totalRounds = G.totalRounds || 1;
+  const isFinalRound = G.gameCount >= totalRounds;
+
   const sorted = [...G.players].sort((a, b) => a.finishRank - b.finishRank);
 
   let podiumHTML = '<div class="recap-podium">';
@@ -1419,7 +1438,6 @@ function tampilkanRekap() {
   const medals  = sorted[1] ? ['②','①','③'] : ['①'];
 
   order.forEach((p, i) => {
-    const pts = RANK_POINTS[Math.min(p.finishRank, RANK_POINTS.length - 1)];
     podiumHTML += `
       <div class="podium-block">
         <div class="podium-avatar" style="background:${p.color}">${p.initials}</div>
@@ -1436,7 +1454,7 @@ function tampilkanRekap() {
     const totalPts = G.totalScores[p.id] || 0;
     listHTML += `
       <div class="recap-item">
-        <div class="recap-rank">${['①','②','③','④'][i]}</div>
+        <div class="recap-rank">${MEDALS[i] || (i+1)}</div>
         <div class="recap-avatar" style="background:${p.color}">${p.initials}</div>
         <div class="recap-name">${p.name}</div>
         <div class="recap-points">+${pts}pt → Total: ${totalPts}pt</div>
@@ -1445,9 +1463,84 @@ function tampilkanRekap() {
   });
   listHTML += '</div>';
 
+  document.getElementById('recap-modal-title').textContent = isFinalRound
+    ? '⚜ Ronde Terakhir Selesai ⚜'
+    : `⚜ Ronde ${G.gameCount}/${totalRounds} Selesai ⚜`;
   document.getElementById('recap-content').innerHTML = podiumHTML + listHTML;
+
+  renderTombolRekap(isFinalRound);
+
   Audio_.playSFX('modal');
   Audio_.playSFX('win');
+  document.getElementById('recap-modal').classList.remove('hidden');
+
+  // Jika sudah ronde terakhir, langsung tampilkan klasemen akhir keseluruhan
+  if (isFinalRound) {
+    setTimeout(() => tampilkanRekapAkhir(), 1400);
+  }
+}
+
+// Tombol aksi di modal rekap: "Ronde Berikutnya" jika masih ada ronde
+// tersisa, atau "Lihat Klasemen Akhir" jika ini ronde terakhir.
+function renderTombolRekap(isFinalRound) {
+  const actions = document.getElementById('recap-actions');
+  if (!actions) return;
+  if (isFinalRound) {
+    actions.innerHTML = `
+      <button class="btn btn-primary" style="flex:1" onclick="tampilkanRekapAkhir()">Lihat Klasemen Akhir →</button>
+      <button class="btn btn-danger btn-sm" onclick="keMenu()">Menu Utama</button>
+    `;
+  } else {
+    actions.innerHTML = `
+      <button class="btn btn-primary" style="flex:1" onclick="rondeBerikutnya()">Ronde Berikutnya →</button>
+      <button class="btn btn-danger btn-sm" onclick="keMenu()">Menu Utama</button>
+    `;
+  }
+}
+
+// ────────────────────────────────────────────────────────────
+// KLASEMEN AKHIR (setelah semua ronde selesai)
+// ────────────────────────────────────────────────────────────
+function tampilkanRekapAkhir() {
+  Audio_.playSFX('btn');
+  const totalRounds = G.totalRounds || 1;
+  const sorted = [...G.players].sort((a, b) => (G.totalScores[b.id] || 0) - (G.totalScores[a.id] || 0));
+
+  let podiumHTML = '<div class="recap-podium">';
+  const order = [sorted[1], sorted[0], sorted[2]].filter(Boolean);
+  const classes = sorted[1] ? ['silver','gold','bronze'] : ['gold'];
+  const medals  = sorted[1] ? ['②','①','③'] : ['①'];
+  order.forEach((p, i) => {
+    podiumHTML += `
+      <div class="podium-block">
+        <div class="podium-avatar" style="background:${p.color}">${p.initials}</div>
+        <div class="podium-name">${p.name}</div>
+        <div class="podium-stand ${classes[i]}">${medals[i]}</div>
+      </div>
+    `;
+  });
+  podiumHTML += '</div>';
+
+  let listHTML = '<div class="recap-list">';
+  sorted.forEach((p, i) => {
+    listHTML += `
+      <div class="recap-item">
+        <div class="recap-rank">${MEDALS[i] || (i+1)}</div>
+        <div class="recap-avatar" style="background:${p.color}">${p.initials}</div>
+        <div class="recap-name">${p.name}</div>
+        <div class="recap-points">Total: ${G.totalScores[p.id] || 0}pt</div>
+      </div>
+    `;
+  });
+  listHTML += '</div>';
+
+  document.getElementById('recap-modal-title').textContent = `🏆 Klasemen Akhir — ${totalRounds} Ronde 🏆`;
+  document.getElementById('recap-content').innerHTML = podiumHTML + listHTML;
+  const actions = document.getElementById('recap-actions');
+  if (actions) {
+    actions.innerHTML = `<button class="btn btn-primary" style="flex:1" onclick="keMenu()">✦ Kembali ke Menu</button>`;
+  }
+  Audio_.playSFX('modal');
   document.getElementById('recap-modal').classList.remove('hidden');
 }
 
