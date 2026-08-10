@@ -169,6 +169,7 @@ function tidur(ms) { return new Promise(r => setTimeout(r, ms)); }
 // - Joker & Ace of Spades juga bertambah tiap level naik, tapi jumlahnya
 //   selalu jauh lebih sedikit dari kartu merah (secukupnya saja).
 function konfigurasiDeck(difficulty) {
+  if (difficulty === 'free')   return { joker: 10, spadeAce: 0, red: 0 };
   if (difficulty === 'easy')   return { joker: 5, spadeAce: 3, red: 25 };
   if (difficulty === 'medium') return { joker: 7, spadeAce: 4, red: 40 };
   /* hard */                   return { joker: 9, spadeAce: 5, red: 55 };
@@ -881,7 +882,7 @@ async function gerakkanPemain(player, steps) {
     gulirKeSlot(p);
     const slotEl = document.getElementById(`slot-${p - 1}`);
     if (slotEl) slotEl.classList.add('highlight');
-    await tidur(400);
+    await tidur(200);
     if (slotEl) slotEl.classList.remove('highlight');
     await tidur(80);
   }
